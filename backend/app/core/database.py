@@ -1,3 +1,5 @@
+# backend/app/core/database.py
+
 import sqlite3
 from typing import Generator
 

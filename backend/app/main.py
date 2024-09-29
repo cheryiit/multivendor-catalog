@@ -1,16 +1,23 @@
-from fastapi import FastAPI, Depends
+# backend/app/main.py
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from api.routes import router
-from core.database import get_db_connection
 from core.config import settings
 import os
+import sqlite3
+import logging
 
 # Define the lifespan handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logging.info("Starting up...")
+
     # Startup event
-    conn = get_db_connection()
+    db_path = '/databases/sqlite/products.db'
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
     # Initialize schema
@@ -19,7 +26,8 @@ async def lifespan(app: FastAPI):
 
     # Check if vendors table is empty
     cursor.execute("SELECT COUNT(*) FROM vendors;")
-    vendor_count = cursor.fetchone()[0]
+    result = cursor.fetchone()
+    vendor_count = result[0] if result else 0
 
     if vendor_count == 0:
         # Seed the vendors data
@@ -31,7 +39,9 @@ async def lifespan(app: FastAPI):
     conn.close()
 
     # Yield control to run the app
+    logging.info("Startup complete.")
     yield
+    logging.info("Shutting down...")
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
