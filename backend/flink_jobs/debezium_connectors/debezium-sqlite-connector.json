@@ -1,0 +1,11 @@
+{
+    "name": "sqlite-connector",
+    "config": {
+      "connector.class": "io.debezium.connector.sqlite.SqliteConnector",
+      "database.filename": "/var/lib/sqlite/products.db",
+      "database.server.name": "sqlite_server",
+      "database.history.kafka.bootstrap.servers": "kafka:9092",
+      "database.history.kafka.topic": "dbhistory.sqlite"
+    }
+  }
+  
