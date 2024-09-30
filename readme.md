@@ -37,7 +37,7 @@ graph TD
                 K --> M[adapters/repositories]
                 L --> N[ports/input_ports]
                 M --> O[ports/output_ports]
-            end
+            end 
             
             G --> L
             I --> M
@@ -85,24 +85,21 @@ graph TD
         Y -.-> |Deploy| Q
         Z -.-> |Deploy| S
         Z -.-> |Deploy| T
-    end
 
-    %% Styling
-    classDef mobileApp fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef backend fill:#bbf,stroke:#333,stroke-width:2px;
-    classDef streamProcessing fill:#bfb,stroke:#333,stroke-width:2px;
-    classDef database fill:#fbb,stroke:#333,stroke-width:2px;
-    classDef dataSync fill:#fbf,stroke:#333,stroke-width:2px;
-    classDef deployment fill:#bff,stroke:#333,stroke-width:2px;
-    classDef groupBox fill:#ffffff,stroke:#000000,stroke-width:2px;
+        %% Styling
+        classDef mobileApp fill:#f9f,stroke:#333,stroke-width:2px;
+        classDef backend fill:#bbf,stroke:#333,stroke-width:2px;
+        classDef streamProcessing fill:#bfb,stroke:#333,stroke-width:2px;
+        classDef database fill:#fbb,stroke:#333,stroke-width:2px;
+        classDef dataSync fill:#fbf,stroke:#333,stroke-width:2px;
+        classDef deployment fill:#bff,stroke:#333,stroke-width:2px;
 
-    class A,B,C,D,E mobileApp;
-    class F,G,H,I,J,K,L,M,N,O backend;
-    class P,Q,R streamProcessing;
-    class S,T database;
-    class U,V dataSync;
-    class W,X,Y,Z deployment;
-    class Project,"Mobile App","Backend","Hexagonal Architecture","Stream Processing","Databases","Data Sync","Deployment" groupBox;
+        class A,B,C,D,E mobileApp;
+        class F,G,H,I,J,K,L,M,N,O backend;
+        class P,Q,R streamProcessing;
+        class S,T database;
+        class U,V dataSync;
+        class W,X,Y,Z deployment;
 ```
 ___
 # System Structure based Architect
