@@ -6,14 +6,13 @@ ___
 ```mermaid
 %%{
   init: {
-    'theme': 'forest',
+    'theme': 'base',
     'themeVariables': {
       'background': '#ffffff',
       'primaryTextColor': '#000000',
       'lineColor': '#000000',
       'fontFamily': 'arial',
       'clusterBkg': '#ffffff',
-      'clusterBorder': '#000000'
     }
   }
 }%%
