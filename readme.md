@@ -11,7 +11,9 @@ ___
       'background': '#ffffff',
       'primaryTextColor': '#000000',
       'lineColor': '#000000',
-      'fontFamily': 'arial'
+      'fontFamily': 'arial',
+      'clusterBkg': '#ffffff',
+      'clusterBorder': '#000000'
     }
   }
 }%%
@@ -25,23 +27,23 @@ graph TD
         E -->|6- Transform & unify data| E
         E -->|7- Store unified data| C
         C <-->|8- Sync data| G[PostgreSQL]
-        subgraph "Local-First Architecture"
+        subgraph LocalFirst ["Local-First Architecture"]
             B
             C
             D
             E
         end
-        subgraph "External Systems"
+        subgraph External ["External Systems"]
             F
         end
-        subgraph "Long-term Storage"
+        subgraph LongTerm ["Long-term Storage"]
             G
         end
         H[Debezium] -->|Data replication| C
         H -->|Data replication| G
         I[SymmetricDS] -->|Data synchronization| C
         I -->|Data synchronization| G
-        subgraph "Hexagonal Architecture"
+        subgraph Hexagonal ["Hexagonal Architecture"]
             J[Domain Logic]
             K[Adapters]
             L[Ports]
@@ -60,9 +62,11 @@ graph TD
     classDef primary fill:#ff69b4,stroke:#000000,stroke-width:1px;
     classDef secondary fill:#e6e6fa,stroke:#000000,stroke-width:1px;
     classDef external fill:#ffff00,stroke:#000000,stroke-width:1px;
+    classDef subgraph fill:#ffffff,stroke:#000000,stroke-width:2px;
     class A,B,C,D,E primary;
     class G,H,I,J,K,L secondary;
     class F,M external;
+    class LocalFirst,External,LongTerm,Hexagonal,Project subgraph;
 ```
 ___
 # System Structure based Architect
