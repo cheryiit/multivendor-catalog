@@ -4,10 +4,22 @@ ___
 # System Architect
 ___
 ```mermaid
----
-config:
-  theme: mc
----
+%%{
+  init: {
+    'theme': 'base',
+    'themeVariables': {
+      'background': '#ffffff',
+      'primaryColor': '#e6e6fa',
+      'secondaryColor': '#ffc0cb',
+      'tertiaryColor': '#fffacd',
+      'primaryTextColor': '#000000',
+      'secondaryTextColor': '#000000',
+      'tertiaryTextColor': '#000000',
+      'lineColor': '#ffffff',
+      'fontFamily': 'arial'
+    }
+  }
+}%%
 graph TD
     A[Flutter Mobile App] -->|1- Request product data| B[FastAPI Backend]
     B -->|2- Check local data| C[SQLite]
