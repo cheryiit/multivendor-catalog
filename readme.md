@@ -1,6 +1,6 @@
-# case study UNIFIED_VENDOR_CATALOG
+# Case Study UNIFIED_VENDOR_CATALOG
 # Future implemantion plan of Architect and Structure
-___
+
 # System Architect
 ___
 ```mermaid
