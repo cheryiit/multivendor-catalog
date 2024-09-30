@@ -4,6 +4,19 @@ ___
 # System Architect
 ___
 ```mermaid
+%%{
+  init: {
+    'theme': 'base',
+    'themeVariables': {
+      'background': '#ffffff',
+      'primaryTextColor': '#000000',
+      'lineColor': '#000000',
+      'fontFamily': 'arial',
+      'clusterBkg': '#ffffff',
+      'clusterBorder': '#000000'
+    }
+  }
+}%%
 graph TD
     A[Flutter Mobile App] -->|1- Request product data| B[FastAPI Backend]
     B -->|2- Check local data| C[SQLite]
