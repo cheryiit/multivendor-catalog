@@ -19,54 +19,90 @@ ___
 }%%
 graph TD
     subgraph Project ["Project"]
-        A[Flutter Mobile App] -->|1- Request product data| B[FastAPI Backend]
-        B -->|2- Check local data| C[SQLite]
-        B -->|3- Data not found| D[Kafka]
-        D -->|4- Process message| E[Flink]
-        E -->|5- Retrieve data| F[External Vendor APIs]
-        E -->|6- Transform & unify data| E
-        E -->|7- Store unified data| C
-        C <-->|8- Sync data| G[PostgreSQL]
-        subgraph LocalFirst ["Local-First Architecture"]
-            B
-            C
-            D
-            E
+        subgraph "Mobile App"
+            A[mobile_app/lib/main.dart] --> B[screens]
+            A --> C[widgets]
+            A --> D[services]
+            D --> E[API Services]
         end
-        subgraph External ["External Systems"]
-            F
+
+        subgraph "Backend"
+            F[backend/app/main.py] --> G[api/routes.py]
+            F --> H[core/config.py]
+            F --> I[core/database.py]
+            
+            subgraph "Hexagonal Architecture"
+                J[domain/entities] --> K[domain/use_cases]
+                K --> L[adapters/controllers]
+                K --> M[adapters/repositories]
+                L --> N[ports/input_ports]
+                M --> O[ports/output_ports]
+            end
+            
+            G --> L
+            I --> M
         end
-        subgraph LongTerm ["Long-term Storage"]
-            G
+
+        subgraph "Stream Processing"
+            P[stream_processing/flink_jobs/data_transformation.py]
+            Q[stream_processing/flink_jobs/api_fetcher.py]
+            R[stream_processing/kafka_config/topics.yml]
         end
-        H[Debezium] -->|Data replication| C
-        H -->|Data replication| G
-        I[SymmetricDS] -->|Data synchronization| C
-        I -->|Data synchronization| G
-        subgraph Hexagonal ["Hexagonal Architecture"]
-            J[Domain Logic]
-            K[Adapters]
-            L[Ports]
-            J --- K
-            J --- L
-            K -->|Input| B
-            K -->|Output| C
-            K -->|Output| D
-            L -->|API| F
+
+        subgraph "Databases"
+            S[databases/sqlite/init_schema.sql]
+            T[databases/postgresql/init_schema.sql]
         end
-        B -->|9- Return unified data to user| A
-        C -->|10- Quick data access| B
-        G -->|11- Analytics & reporting| M[Business Intelligence Tools]
+
+        subgraph "Data Sync"
+            U[data_sync/debezium/connector_config.json]
+            V[data_sync/symmetricds/sync_config.properties]
+        end
+
+        subgraph "Deployment"
+            W[deployment/docker-compose.yml]
+            X[deployment/kubernetes/backend-deployment.yaml]
+            Y[deployment/kubernetes/flink-deployment.yaml]
+            Z[deployment/kubernetes/database-deployment.yaml]
+        end
+
+        %% Interactions
+        E -.-> |HTTP Requests| G
+        O -.-> |Database Queries| S
+        O -.-> |Database Queries| T
+        Q -.-> |Fetch Data| ExternalAPI[External Vendor APIs]
+        P -.-> |Process Data| Q
+        P -.-> |Send/Receive Messages| R
+        U -.-> |Replicate Data| S
+        U -.-> |Replicate Data| T
+        V -.-> |Sync Data| S
+        V -.-> |Sync Data| T
+        W -.-> |Deploy| F
+        W -.-> |Deploy| P
+        W -.-> |Deploy| Q
+        X -.-> |Deploy| F
+        Y -.-> |Deploy| P
+        Y -.-> |Deploy| Q
+        Z -.-> |Deploy| S
+        Z -.-> |Deploy| T
     end
-    
-    classDef primary fill:#ff69b4,stroke:#000000,stroke-width:1px;
-    classDef secondary fill:#e6e6fa,stroke:#000000,stroke-width:1px;
-    classDef external fill:#ffff00,stroke:#000000,stroke-width:1px;
+
+    %% Styling
+    classDef mobileApp fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef backend fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef streamProcessing fill:#bfb,stroke:#333,stroke-width:2px;
+    classDef database fill:#fbb,stroke:#333,stroke-width:2px;
+    classDef dataSync fill:#fbf,stroke:#333,stroke-width:2px;
+    classDef deployment fill:#bff,stroke:#333,stroke-width:2px;
     classDef subgraph fill:#ffffff,stroke:#000000,stroke-width:2px;
-    class A,B,C,D,E primary;
-    class G,H,I,J,K,L secondary;
-    class F,M external;
-    class LocalFirst,External,LongTerm,Hexagonal,Project subgraph;
+
+    class A,B,C,D,E mobileApp;
+    class F,G,H,I,J,K,L,M,N,O backend;
+    class P,Q,R streamProcessing;
+    class S,T database;
+    class U,V dataSync;
+    class W,X,Y,Z deployment;
+    class Project,"Mobile App","Backend","Hexagonal Architecture","Stream Processing","Databases","Data Sync","Deployment" subgraph;
 ```
 ___
 # System Structure based Architect
