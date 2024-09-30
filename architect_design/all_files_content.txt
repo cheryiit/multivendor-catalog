@@ -86,9 +86,13 @@ services:
     ports:
       - "9092:9092"
     environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'  # Otomatik konu oluşturmayı etkinleştir
     depends_on:
       - zookeeper
     networks:
@@ -126,6 +130,7 @@ services:
       CONFIG_STORAGE_TOPIC: my_connect_configs
       OFFSET_STORAGE_TOPIC: my_connect_offsets
       STATUS_STORAGE_TOPIC: my_connect_statuses
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092  # Debezium için eklenmesi gereken
     ports:
       - "8083:8083"
     depends_on:
@@ -182,6 +187,232 @@ networks:
 
 readme.md :
 
+# Case Study UNIFIED_VENDOR_CATALOG
+# Future implemantion plan of Architect and Structure
+
+# System Architect
+___
+```mermaid
+%%{
+  init: {
+    'theme': 'base',
+    'themeVariables': {
+      'background': '#ffffff',
+      'primaryTextColor': '#000000',
+      'lineColor': '#000000',
+      'fontFamily': 'arial',
+      'clusterBkg': '#ffffff',
+      'clusterBorder': '#000000'
+    }
+  }
+}%%
+graph TD
+    subgraph Project ["Project"]
+        A[Flutter Mobile App] -->|1- Request product data| B[FastAPI Backend]
+        B -->|2- Check local data| C[SQLite]
+        B -->|3- Data not found| D[Kafka]
+        D -->|4- Process message| E[Flink]
+        E -->|5- Retrieve data| F[External Vendor APIs]
+        E -->|6- Transform & unify data| E
+        E -->|7- Store unified data| C
+        C <-->|8- Sync data| G[PostgreSQL]
+
+        subgraph LocalFirstArchitecture ["Local-First Architecture"]
+            B
+            C
+            D
+            E
+        end
+
+        subgraph ExternalSystems ["External Systems"]
+            F
+        end
+
+        subgraph LongTermStorage ["Long-term Storage"]
+            G
+        end
+
+        H[Debezium] -->|Data replication| C
+        H -->|Data replication| G
+        I[SymmetricDS] -->|Data synchronization| C
+        I -->|Data synchronization| G
+
+        subgraph HexagonalArchitecture ["Hexagonal Architecture"]
+            J[Domain Logic]
+            K[Adapters]
+            L[Ports]
+            J --- K
+            J --- L
+            K -->|Input| B
+            K -->|Output| C
+            K -->|Output| D
+            L -->|API| F
+        end
+
+        B -->|9- Return unified data to user| A
+        C -->|10- Quick data access| B
+        G -->|11- Analytics & reporting| M[Business Intelligence Tools]
+    end
+
+    classDef primary fill:#f9f,stroke:#333,stroke-width:4px;
+    classDef secondary fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef external fill:#ffa,stroke:#333,stroke-width:2px;
+    classDef groupBox fill:#ffffff,stroke:#000000,stroke-width:2px;
+
+    class A,B,C,D,E primary;
+    class G,H,I,J,K,L secondary;
+    class F,M external;
+    class Project,LocalFirstArchitecture,ExternalSystems,LongTermStorage,HexagonalArchitecture groupBox;
+```
+___
+# System Structure based Architect
+```mermaid
+%%{
+  init: {
+    'theme': 'base',
+    'themeVariables': {
+      'background': '#ffffff',
+      'primaryTextColor': '#000000',
+      'lineColor': '#000000',
+      'fontFamily': 'arial',
+      'clusterBkg': '#ffffff',
+      'clusterBorder': '#000000'
+    }
+  }
+}%%
+graph TD
+    subgraph Project ["Project"]
+        subgraph MobileApp ["Mobile App"]
+            A[mobile_app/lib/main.dart] --> B[screens]
+            A --> C[widgets]
+            A --> D[services]
+            D --> E[API Services]
+        end
+
+        subgraph Backend ["Backend"]
+            F[backend/app/main.py] --> G[api/routes.py]
+            F --> H[core/config.py]
+            F --> I[core/database.py]
+            
+            subgraph HexagonalArchitecture ["Hexagonal Architecture"]
+                J[domain/entities] --> K[domain/use_cases]
+                K --> L[adapters/controllers]
+                K --> M[adapters/repositories]
+                L --> N[ports/input_ports]
+                M --> O[ports/output_ports]
+            end
+            
+            G --> L
+            I --> M
+        end
+
+        subgraph StreamProcessing ["Stream Processing"]
+            P[stream_processing/flink_jobs/data_transformation.py]
+            Q[stream_processing/flink_jobs/api_fetcher.py]
+            R[stream_processing/kafka_config/topics.yml]
+        end
+
+        subgraph Databases ["Databases"]
+            S[databases/sqlite/init_schema.sql]
+            T[databases/postgresql/init_schema.sql]
+        end
+
+        subgraph DataSync ["Data Sync"]
+            U[data_sync/debezium/connector_config.json]
+            V[data_sync/symmetricds/sync_config.properties]
+        end
+
+        subgraph Deployment ["Deployment"]
+            W[deployment/docker-compose.yml]
+            X[deployment/kubernetes/backend-deployment.yaml]
+            Y[deployment/kubernetes/flink-deployment.yaml]
+            Z[deployment/kubernetes/database-deployment.yaml]
+        end
+
+        %% Interactions
+        E -.-> |HTTP Requests| G
+        O -.-> |Database Queries| S
+        O -.-> |Database Queries| T
+        Q -.-> |Fetch Data| ExternalAPI[External Vendor APIs]
+        P -.-> |Process Data| Q
+        P -.-> |Send/Receive Messages| R
+        U -.-> |Replicate Data| S
+        U -.-> |Replicate Data| T
+        V -.-> |Sync Data| S
+        V -.-> |Sync Data| T
+        W -.-> |Deploy| F
+        W -.-> |Deploy| P
+        W -.-> |Deploy| Q
+        X -.-> |Deploy| F
+        Y -.-> |Deploy| P
+        Y -.-> |Deploy| Q
+        Z -.-> |Deploy| S
+        Z -.-> |Deploy| T
+    end
+
+    %% Styling
+    classDef mobileApp fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef backend fill:#bbf,stroke:#333,stroke-width:2px;
+    classDef streamProcessing fill:#bfb,stroke:#333,stroke-width:2px;
+    classDef database fill:#fbb,stroke:#333,stroke-width:2px;
+    classDef dataSync fill:#fbf,stroke:#333,stroke-width:2px;
+    classDef deployment fill:#bff,stroke:#333,stroke-width:2px;
+    classDef groupBox fill:#ffffff,stroke:#000000,stroke-width:2px;
+
+    class A,B,C,D,E mobileApp;
+    class F,G,H,I,J,K,L,M,N,O backend;
+    class P,Q,R streamProcessing;
+    class S,T database;
+    class U,V dataSync;
+    class W,X,Y,Z deployment;
+    class Project,MobileApp,Backend,HexagonalArchitecture,StreamProcessing,Databases,DataSync,Deployment groupBox;
+```
+___
+# Current structure:
+```
+multivendor-catalog/
+    .gitattributes
+    docker-compose.yml
+    readme.md
+    requirements.txt
+    backend/
+        app/
+            Dockerfile
+            main.py
+            api/
+                routes.py
+            core/
+                config.py
+                database.py
+                kafka_producer.py
+                postgres_database.py
+        flink_jobs/
+            debezium_sync.py
+            flink_job.py
+            debezium_connectors/
+                debezium-postgres-connector.json
+                debezium-sqlite-connector.json
+    databases/
+        postgresql/
+            init_postgres_schema.sql
+        sqlite/
+            init_schema.sql
+            products.db
+            seed_data.sql
+    flink/
+        Dockerfile
+    mobile_app/
+        assets/
+            images/
+                image.png
+        lib/
+            main.dart
+            screens/
+                product_list_screen.dart
+            services/
+    multivendor-catalog/
+        .gitattributes
+```
 
 
 ==================================================
@@ -381,6 +612,7 @@ from kafka import KafkaProducer
 import json
 import os
 import time
+import logging
 
 # Kafka configuration
 KAFKA_BROKER_URL = os.getenv('KAFKA_BROKER_URL', 'kafka:9092')
@@ -395,12 +627,18 @@ def get_kafka_producer():
             try:
                 producer = KafkaProducer(
                     bootstrap_servers=[KAFKA_BROKER_URL],
-                    api_version=(0, 11, 5),
-                    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+                    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                    max_request_size=1048576,  # 1MB
+                    buffer_memory=33554432,  # 32MB
+                    max_block_ms=5000,
+                    request_timeout_ms=30000,
+                    api_version_auto_timeout_ms=5000
                 )
+                logging.info(f"Successfully connected to Kafka broker on attempt {attempt + 1}")
                 break
             except Exception as e:
-                print(f"Attempt {attempt + 1}: Failed to connect to Kafka broker. Retrying in 5 seconds...")
+                logging.warning(f"Attempt {attempt + 1}: Failed to connect to Kafka broker. Retrying in 5 seconds...")
+                logging.exception(e)
                 time.sleep(5)
         else:
             raise Exception("Could not establish connection to Kafka broker after multiple attempts.")
@@ -409,12 +647,15 @@ def get_kafka_producer():
 def send_data_to_kafka(data):
     try:
         kafka_producer = get_kafka_producer()
-        kafka_producer.send(TOPIC_NAME, value=data)
-        kafka_producer.flush()
-        print(f"Data sent to Kafka topic: {TOPIC_NAME}")
+        future = kafka_producer.send(TOPIC_NAME, value=data)
+        result = future.get(timeout=10)
+        logging.info(f"Data sent to Kafka topic: {TOPIC_NAME}, partition: {result.partition}, offset: {result.offset}")
     except Exception as e:
-        print(f"Failed to send data to Kafka: {e}")
+        logging.error(f"Failed to send data to Kafka: {e}")
+        logging.exception(e)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 ==================================================
 
@@ -613,8 +854,10 @@ def process_message(message):
         vendor_id = data.get('vendor_id')
 
         api_url = get_vendor_api_url(vendor_id)
+        logging.info(f"Fetching data from API URL: {api_url}")
         if api_url:
             response = requests.get(api_url)
+            logging.info(f"API response status: {response.status_code}")
             if response.status_code == 200:
                 products = response.json().get('products', [])
                 logging.info(f"Fetched {len(products)} products from vendor {vendor_id}")
@@ -651,9 +894,10 @@ def flink_job():
         deserialization_schema=SimpleStringSchema(),
         properties={
             'bootstrap.servers': KAFKA_BROKER_URL,
-            'group.id': 'flink_consumer'
+            'group.id': 'flink_consumer',
+            'auto.offset.reset': 'earliest'
         }
-    )
+)
 
     kafka_stream = env.add_source(kafka_consumer)
 

@@ -95,8 +95,10 @@ def process_message(message):
         vendor_id = data.get('vendor_id')
 
         api_url = get_vendor_api_url(vendor_id)
+        logging.info(f"Fetching data from API URL: {api_url}")
         if api_url:
             response = requests.get(api_url)
+            logging.info(f"API response status: {response.status_code}")
             if response.status_code == 200:
                 products = response.json().get('products', [])
                 logging.info(f"Fetched {len(products)} products from vendor {vendor_id}")
@@ -133,9 +135,10 @@ def flink_job():
         deserialization_schema=SimpleStringSchema(),
         properties={
             'bootstrap.servers': KAFKA_BROKER_URL,
-            'group.id': 'flink_consumer'
+            'group.id': 'flink_consumer',
+            'auto.offset.reset': 'earliest'
         }
-    )
+)
 
     kafka_stream = env.add_source(kafka_consumer)
 
