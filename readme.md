@@ -61,73 +61,88 @@ graph TD
 ___
 # System Structure based Architect
 ```mermaid
+%%{
+  init: {
+    'theme': 'base',
+    'themeVariables': {
+      'background': '#ffffff',
+      'primaryTextColor': '#000000',
+      'lineColor': '#000000',
+      'fontFamily': 'arial',
+      'clusterBkg': '#ffffff',
+      'clusterBorder': '#000000'
+    }
+  }
+}%%
 graph TD
-    subgraph "Mobile App"
-        A[mobile_app/lib/main.dart] --> B[screens]
-        A --> C[widgets]
-        A --> D[services]
-        D --> E[API Services]
-    end
-
-    subgraph "Backend"
-        F[backend/app/main.py] --> G[api/routes.py]
-        F --> H[core/config.py]
-        F --> I[core/database.py]
-        
-        subgraph "Hexagonal Architecture"
-            J[domain/entities] --> K[domain/use_cases]
-            K --> L[adapters/controllers]
-            K --> M[adapters/repositories]
-            L --> N[ports/input_ports]
-            M --> O[ports/output_ports]
+    subgraph Project ["Project"]
+        subgraph MobileApp ["Mobile App"]
+            A[mobile_app/lib/main.dart] --> B[screens]
+            A --> C[widgets]
+            A --> D[services]
+            D --> E[API Services]
         end
-        
-        G --> L
-        I --> M
-    end
 
-    subgraph "Stream Processing"
-        P[stream_processing/flink_jobs/data_transformation.py]
-        Q[stream_processing/flink_jobs/api_fetcher.py]
-        R[stream_processing/kafka_config/topics.yml]
-    end
+        subgraph Backend ["Backend"]
+            F[backend/app/main.py] --> G[api/routes.py]
+            F --> H[core/config.py]
+            F --> I[core/database.py]
+            
+            subgraph HexagonalArchitecture ["Hexagonal Architecture"]
+                J[domain/entities] --> K[domain/use_cases]
+                K --> L[adapters/controllers]
+                K --> M[adapters/repositories]
+                L --> N[ports/input_ports]
+                M --> O[ports/output_ports]
+            end
+            
+            G --> L
+            I --> M
+        end
 
-    subgraph "Databases"
-        S[databases/sqlite/init_schema.sql]
-        T[databases/postgresql/init_schema.sql]
-    end
+        subgraph StreamProcessing ["Stream Processing"]
+            P[stream_processing/flink_jobs/data_transformation.py]
+            Q[stream_processing/flink_jobs/api_fetcher.py]
+            R[stream_processing/kafka_config/topics.yml]
+        end
 
-    subgraph "Data Sync"
-        U[data_sync/debezium/connector_config.json]
-        V[data_sync/symmetricds/sync_config.properties]
-    end
+        subgraph Databases ["Databases"]
+            S[databases/sqlite/init_schema.sql]
+            T[databases/postgresql/init_schema.sql]
+        end
 
-    subgraph "Deployment"
-        W[deployment/docker-compose.yml]
-        X[deployment/kubernetes/backend-deployment.yaml]
-        Y[deployment/kubernetes/flink-deployment.yaml]
-        Z[deployment/kubernetes/database-deployment.yaml]
-    end
+        subgraph DataSync ["Data Sync"]
+            U[data_sync/debezium/connector_config.json]
+            V[data_sync/symmetricds/sync_config.properties]
+        end
 
-    %% Interactions
-    E -.-> |HTTP Requests| G
-    O -.-> |Database Queries| S
-    O -.-> |Database Queries| T
-    Q -.-> |Fetch Data| ExternalAPI[External Vendor APIs]
-    P -.-> |Process Data| Q
-    P -.-> |Send/Receive Messages| R
-    U -.-> |Replicate Data| S
-    U -.-> |Replicate Data| T
-    V -.-> |Sync Data| S
-    V -.-> |Sync Data| T
-    W -.-> |Deploy| F
-    W -.-> |Deploy| P
-    W -.-> |Deploy| Q
-    X -.-> |Deploy| F
-    Y -.-> |Deploy| P
-    Y -.-> |Deploy| Q
-    Z -.-> |Deploy| S
-    Z -.-> |Deploy| T
+        subgraph Deployment ["Deployment"]
+            W[deployment/docker-compose.yml]
+            X[deployment/kubernetes/backend-deployment.yaml]
+            Y[deployment/kubernetes/flink-deployment.yaml]
+            Z[deployment/kubernetes/database-deployment.yaml]
+        end
+
+        %% Interactions
+        E -.-> |HTTP Requests| G
+        O -.-> |Database Queries| S
+        O -.-> |Database Queries| T
+        Q -.-> |Fetch Data| ExternalAPI[External Vendor APIs]
+        P -.-> |Process Data| Q
+        P -.-> |Send/Receive Messages| R
+        U -.-> |Replicate Data| S
+        U -.-> |Replicate Data| T
+        V -.-> |Sync Data| S
+        V -.-> |Sync Data| T
+        W -.-> |Deploy| F
+        W -.-> |Deploy| P
+        W -.-> |Deploy| Q
+        X -.-> |Deploy| F
+        Y -.-> |Deploy| P
+        Y -.-> |Deploy| Q
+        Z -.-> |Deploy| S
+        Z -.-> |Deploy| T
+    end
 
     %% Styling
     classDef mobileApp fill:#f9f,stroke:#333,stroke-width:2px;
@@ -136,6 +151,7 @@ graph TD
     classDef database fill:#fbb,stroke:#333,stroke-width:2px;
     classDef dataSync fill:#fbf,stroke:#333,stroke-width:2px;
     classDef deployment fill:#bff,stroke:#333,stroke-width:2px;
+    classDef groupBox fill:#ffffff,stroke:#000000,stroke-width:2px;
 
     class A,B,C,D,E mobileApp;
     class F,G,H,I,J,K,L,M,N,O backend;
@@ -143,6 +159,7 @@ graph TD
     class S,T database;
     class U,V dataSync;
     class W,X,Y,Z deployment;
+    class Project,MobileApp,Backend,HexagonalArchitecture,StreamProcessing,Databases,DataSync,Deployment groupBox;
 ```
 ___
 # Current structure:
