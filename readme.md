@@ -94,7 +94,7 @@ graph TD
     classDef database fill:#fbb,stroke:#333,stroke-width:2px;
     classDef dataSync fill:#fbf,stroke:#333,stroke-width:2px;
     classDef deployment fill:#bff,stroke:#333,stroke-width:2px;
-    classDef subgraph fill:#ffffff,stroke:#000000,stroke-width:2px;
+    classDef groupBox fill:#ffffff,stroke:#000000,stroke-width:2px;
 
     class A,B,C,D,E mobileApp;
     class F,G,H,I,J,K,L,M,N,O backend;
@@ -102,7 +102,7 @@ graph TD
     class S,T database;
     class U,V dataSync;
     class W,X,Y,Z deployment;
-    class Project,"Mobile App","Backend","Hexagonal Architecture","Stream Processing","Databases","Data Sync","Deployment" subgraph;
+    class Project,"Mobile App","Backend","Hexagonal Architecture","Stream Processing","Databases","Data Sync","Deployment" groupBox;
 ```
 ___
 # System Structure based Architect
