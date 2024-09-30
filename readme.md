@@ -6,7 +6,7 @@ ___
 ```mermaid
 %%{
   init: {
-    'theme': 'base',
+    'theme': 'forest',
     'themeVariables': {
       'background': '#ffffff',
       'primaryTextColor': '#000000',
