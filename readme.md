@@ -4,6 +4,10 @@ ___
 # System Architect
 ___
 ```mermaid
+---
+config:
+  theme: mc
+---
 graph TD
     A[Flutter Mobile App] -->|1- Request product data| B[FastAPI Backend]
     B -->|2- Check local data| C[SQLite]
