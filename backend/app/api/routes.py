@@ -10,7 +10,7 @@ router = APIRouter()
 def get_products(vendor_id: int = None, conn=Depends(get_db_connection)):
     cursor = conn.cursor()
     if vendor_id:
-        # Fetch products for a specific vendor
+        # Belirli bir satıcı için ürünleri getir
         cursor.execute("""
             SELECT p.*
             FROM products p
@@ -18,17 +18,21 @@ def get_products(vendor_id: int = None, conn=Depends(get_db_connection)):
             WHERE pv.vendor_id = ?
         """, (vendor_id,))
     else:
-        # Fetch all products
+        # Tüm ürünleri getir
         cursor.execute("SELECT * FROM products")
     products = cursor.fetchall()
 
     if not products:
-        # No data, send request to fetch data
+        # Veri yok, veri çekme sürecini başlat
         if vendor_id:
             send_data_to_kafka({'vendor_id': vendor_id})
-            raise HTTPException(status_code=202, detail="Data is being fetched, please try again shortly.")
         else:
-            raise HTTPException(status_code=404, detail="No products found.")
+            # Tüm satıcılar için veri çekme talebi gönder
+            cursor.execute("SELECT id FROM vendors")
+            vendor_ids = cursor.fetchall()
+            for vendor in vendor_ids:
+                send_data_to_kafka({'vendor_id': vendor['id']})
+        raise HTTPException(status_code=202, detail="Data is being fetched, please try again shortly.")
     
     return {"products": [dict(ix) for ix in products]}
 

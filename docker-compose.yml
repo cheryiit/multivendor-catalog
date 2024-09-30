@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   fastapi:
     container_name: fastapi_service
@@ -77,20 +75,31 @@ services:
       - app_network
 
   flink-jobmanager:
-    image: flink:latest
+    build:
+      context: .
+      dockerfile: flink/Dockerfile
     container_name: flink_jobmanager
     ports:
       - "8081:8081"
-    command: ["jobmanager"]
     environment:
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
     volumes:
+      - ./backend/flink_jobs:/flink_jobs
       - ./databases/sqlite:/databases/sqlite
     networks:
       - app_network
+    depends_on:
+      - kafka
+    entrypoint: >
+      /bin/sh -c "
+      /docker-entrypoint.sh jobmanager;
+      flink run -d -py /flink_jobs/flink_job.py
+      "
 
   flink-taskmanager:
-    image: flink:latest
+    build:
+      context: .
+      dockerfile: flink/Dockerfile
     container_name: flink_taskmanager
     depends_on:
       - flink-jobmanager
