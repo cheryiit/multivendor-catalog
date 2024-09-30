@@ -9,13 +9,8 @@ ___
     'theme': 'base',
     'themeVariables': {
       'background': '#ffffff',
-      'primaryColor': '#e6e6fa',
-      'secondaryColor': '#ffc0cb',
-      'tertiaryColor': '#fffacd',
       'primaryTextColor': '#000000',
-      'secondaryTextColor': '#000000',
-      'tertiaryTextColor': '#000000',
-      'lineColor': '#ffffff',
+      'lineColor': '#000000',
       'fontFamily': 'arial'
     }
   }
