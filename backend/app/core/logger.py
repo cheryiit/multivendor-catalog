@@ -4,6 +4,9 @@ import logging
 import os
 from datetime import datetime
 
+import logging
+import os
+
 def setup_logger(name):
     log_dir = '/app/logs'
     if not os.path.exists(log_dir):
@@ -16,7 +19,8 @@ def setup_logger(name):
 
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
-    file_handler = logging.FileHandler(log_file)
+    # Append mode ('a') instead of overwriting ('w')
+    file_handler = logging.FileHandler(log_file, mode='a')  
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
@@ -25,6 +29,7 @@ def setup_logger(name):
     logger.addHandler(console_handler)
 
     return logger
+
 
 def log_step(logger, step, message):
     logger.info(f"STEP {step}: {message}")
