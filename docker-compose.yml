@@ -83,7 +83,7 @@ services:
       OFFSET_STORAGE_TOPIC: my_connect_offsets
       STATUS_STORAGE_TOPIC: my_connect_statuses
       CONNECT_BOOTSTRAP_SERVERS: kafka:9092  # Debezium için eklenmesi gereken
-    ports:
+      ports:
       - "8083:8083"
       CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
       CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
