@@ -1,3 +1,4 @@
+import sys
 from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.datastream.connectors import FlinkKafkaConsumer
 from pyflink.common.serialization import SimpleStringSchema
@@ -60,27 +61,56 @@ def insert_into_sqlite(products, vendor_id):
     except Exception as e:
         log_step(logger, 4, f"Error inserting products into SQLite: {str(e)}")
 
+def get_size(obj, seen=None):
+    """Recursively calculate size of objects"""
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size
+
 def process_message(message):
     try:
-        log_step(logger, 5, f"Processing message: {message}")
+        log_step(logger, 1, f"Processing message. Message size: {len(message)} bytes")
         data = json.loads(message)
+        log_step(logger, 2, f"Parsed data size: {get_size(data)} bytes")
+        
         vendor_id = data.get('vendor_id')
+        log_step(logger, 3, f"Processing data for vendor_id: {vendor_id}")
 
         api_url = get_vendor_api_url(vendor_id)
         if not api_url:
-            log_step(logger, 6, f"Vendor with ID {vendor_id} not found or has no API URL")
+            log_step(logger, 4, f"Vendor with ID {vendor_id} not found or has no API URL")
             return
 
-        log_step(logger, 7, f"Fetching data from API URL: {api_url}")
+        log_step(logger, 5, f"Fetching data from API URL: {api_url}")
         response = requests.get(api_url)
+        log_step(logger, 6, f"API response size: {len(response.content)} bytes")
+        
         if response.status_code == 200:
             products = response.json().get('products', [])
-            log_step(logger, 8, f"Fetched {len(products)} products from vendor {vendor_id}")
+            log_step(logger, 7, f"Fetched {len(products)} products from vendor {vendor_id}")
+            log_step(logger, 8, f"Total size of products data: {get_size(products)} bytes")
+            
+            for i, product in enumerate(products[:5]):  # Log details of first 5 products
+                log_step(logger, 9, f"Product {i+1} details: {json.dumps(product)[:200]}...")  # Log first 200 characters
+            
             insert_into_sqlite(products, vendor_id)
         else:
-            log_step(logger, 8, f"Failed to fetch data from vendor {vendor_id}, status code: {response.status_code}")
+            log_step(logger, 7, f"Failed to fetch data from vendor {vendor_id}, status code: {response.status_code}")
     except Exception as e:
-        log_step(logger, 9, f"Exception occurred while processing message: {str(e)}")
+        log_step(logger, 10, f"Exception occurred while processing message: {str(e)}")
+        log_step(logger, 11, f"Full message content: {message[:1000]}...")  # Log first 1000 characters of the message
 
 def flink_job():
     log_step(logger, 10, "Starting Flink job")

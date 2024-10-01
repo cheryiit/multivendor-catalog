@@ -1,3 +1,4 @@
+import sys
 from kafka import KafkaProducer
 import json
 import os
@@ -39,19 +40,45 @@ def get_kafka_producer():
             raise Exception("Could not establish connection to Kafka broker after multiple attempts.")
     return producer
 
+def get_size(obj, seen=None):
+    """Recursively calculate size of objects"""
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size
+
 def send_data_to_kafka(data):
     try:
-        log_step(logger, 5, f"Preparing to send data to Kafka topic: {TOPIC_NAME}")
+        log_step(logger, 1, f"Preparing to send data to Kafka topic: {TOPIC_NAME}")
+        log_step(logger, 2, f"Data size: {get_size(data)} bytes")
+        
         kafka_producer = get_kafka_producer()
         serialized_data = json.dumps(data).encode('utf-8')
         
-        if len(serialized_data) > MAX_MESSAGE_SIZE:
-            log_step(logger, 6, f"Data size ({len(serialized_data)} bytes) exceeds maximum message size ({MAX_MESSAGE_SIZE} bytes)")
-            # Implement data truncation or splitting logic here if needed
+        log_step(logger, 3, f"Serialized data size: {len(serialized_data)} bytes")
         
-        log_step(logger, 7, "Sending data to Kafka")
+        if len(serialized_data) > MAX_MESSAGE_SIZE:
+            log_step(logger, 4, f"WARNING: Data size ({len(serialized_data)} bytes) exceeds maximum message size ({MAX_MESSAGE_SIZE} bytes)")
+            log_step(logger, 5, f"Data preview: {str(data)[:500]}...")  # Log first 500 characters of the data
+            
+            # Implement message splitting logic here if needed
+            # For now, we'll just log a warning and try to send the data as is
+        
         future = kafka_producer.send(TOPIC_NAME, value=data)
-        result = future.get(timeout=10)
-        log_step(logger, 8, f"Data sent to Kafka topic: {TOPIC_NAME}, partition: {result.partition}, offset: {result.offset}")
+        result = future.get(timeout=60)
+        log_step(logger, 6, f"Data sent to Kafka topic: {TOPIC_NAME}, partition: {result.partition}, offset: {result.offset}")
     except Exception as e:
-        log_step(logger, 9, f"Failed to send data to Kafka. Error: {str(e)}")
+        log_step(logger, 7, f"Failed to send data to Kafka: {str(e)}")
+        log_step(logger, 8, f"Error details: {str(e)}")
+        log_step(logger, 9, f"Data that failed to send: {str(data)[:1000]}...")  # Log first 1000 characters of the data
