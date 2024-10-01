@@ -1,6 +1,6 @@
 {
-    "name": "postgres-connector",
-    "config": {
+  "name": "postgres-connector",
+  "config": {
       "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
       "database.hostname": "postgres",
       "database.port": "5432",
@@ -8,11 +8,17 @@
       "database.password": "password",
       "database.dbname": "product_catalog",
       "database.server.name": "postgres_server",
+      "table.include.list": "public.products,public.vendors",
       "plugin.name": "pgoutput",
       "slot.name": "debezium_slot",
       "publication.name": "debezium_publication",
       "database.history.kafka.bootstrap.servers": "kafka:9092",
-      "database.history.kafka.topic": "dbhistory.postgres"
-    }
+      "database.history.kafka.topic": "schema-changes.product_catalog",
+      "transforms": "unwrap",
+      "transforms.unwrap.type": "io.debezium.transforms.UnwrapFromEnvelope",
+      "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "key.converter.schemas.enable": "false",
+      "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "value.converter.schemas.enable": "false"
   }
-  
+}

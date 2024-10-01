@@ -1,7 +1,6 @@
 multivendor-catalog/
     .gitattributes
     docker-compose.yml
-    readme.md
     requirements.txt
     backend/
         app/
@@ -13,7 +12,9 @@ multivendor-catalog/
                 config.py
                 database.py
                 kafka_producer.py
+                logger.py
                 postgres_database.py
+            logs/
         flink_jobs/
             debezium_sync.py
             flink_job.py
@@ -29,6 +30,7 @@ multivendor-catalog/
             seed_data.sql
     flink/
         Dockerfile
+    logs/
     mobile_app/
         assets/
             images/
@@ -38,5 +40,4 @@ multivendor-catalog/
             screens/
                 product_list_screen.dart
             services/
-    multivendor-catalog/
-        .gitattributes
+                logger_service.dart

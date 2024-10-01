@@ -3,7 +3,6 @@ Project Structure:
 multivendor-catalog/
     .gitattributes
     docker-compose.yml
-    readme.md
     requirements.txt
     backend/
         app/
@@ -15,7 +14,9 @@ multivendor-catalog/
                 config.py
                 database.py
                 kafka_producer.py
+                logger.py
                 postgres_database.py
+            logs/
         flink_jobs/
             debezium_sync.py
             flink_job.py
@@ -31,6 +32,7 @@ multivendor-catalog/
             seed_data.sql
     flink/
         Dockerfile
+    logs/
     mobile_app/
         assets/
             images/
@@ -40,8 +42,7 @@ multivendor-catalog/
             screens/
                 product_list_screen.dart
             services/
-    multivendor-catalog/
-        .gitattributes
+                logger_service.dart
 
 ==================================================
 
@@ -92,19 +93,28 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'  # Otomatik konu oluşturmayı etkinleştir
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_MESSAGE_MAX_BYTES: '5242880'  # 5 MB
+      KAFKA_MAX_REQUEST_SIZE: '5242880'  # 5 MB
+      KAFKA_RECEIVE_BUFFER_BYTES: '10485760'  # 10 MB
+      KAFKA_SEND_BUFFER_BYTES: '10485760'  # 10 MB
     depends_on:
       - zookeeper
     networks:
       - app_network
+
 
   zookeeper:
     image: wurstmeister/zookeeper:latest
     container_name: zookeeper_service
     ports:
       - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     networks:
       - app_network
+
 
   postgres:
     image: postgres:13
@@ -124,15 +134,18 @@ services:
   debezium:
     image: debezium/connect:latest
     container_name: debezium_service
+    ports:
+      - "8083:8083"
     environment:
       BOOTSTRAP_SERVERS: kafka:9092
       GROUP_ID: 1
       CONFIG_STORAGE_TOPIC: my_connect_configs
       OFFSET_STORAGE_TOPIC: my_connect_offsets
       STATUS_STORAGE_TOPIC: my_connect_statuses
-      CONNECT_BOOTSTRAP_SERVERS: kafka:9092  # Debezium için eklenmesi gereken
-    ports:
-      - "8083:8083"
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
     depends_on:
       - kafka
     networks:
@@ -185,238 +198,6 @@ networks:
 
 ==================================================
 
-readme.md :
-
-# Case Study UNIFIED_VENDOR_CATALOG
-# Future implemantion plan of Architect and Structure
-
-# System Architect
-___
-```mermaid
-%%{
-  init: {
-    'theme': 'base',
-    'themeVariables': {
-      'background': '#ffffff',
-      'primaryTextColor': '#000000',
-      'lineColor': '#000000',
-      'fontFamily': 'arial',
-      'clusterBkg': '#ffffff',
-      'clusterBorder': '#000000'
-    }
-  }
-}%%
-graph TD
-    subgraph Project ["Project"]
-        A[Flutter Mobile App] -->|1- Request product data| B[FastAPI Backend]
-        B -->|2- Check local data| C[SQLite]
-        B -->|3- Data not found| D[Kafka]
-        D -->|4- Process message| E[Flink]
-        E -->|5- Retrieve data| F[External Vendor APIs]
-        E -->|6- Transform & unify data| E
-        E -->|7- Store unified data| C
-        C <-->|8- Sync data| G[PostgreSQL]
-
-        subgraph LocalFirstArchitecture ["Local-First Architecture"]
-            B
-            C
-            D
-            E
-        end
-
-        subgraph ExternalSystems ["External Systems"]
-            F
-        end
-
-        subgraph LongTermStorage ["Long-term Storage"]
-            G
-        end
-
-        H[Debezium] -->|Data replication| C
-        H -->|Data replication| G
-        I[SymmetricDS] -->|Data synchronization| C
-        I -->|Data synchronization| G
-
-        subgraph HexagonalArchitecture ["Hexagonal Architecture"]
-            J[Domain Logic]
-            K[Adapters]
-            L[Ports]
-            J --- K
-            J --- L
-            K -->|Input| B
-            K -->|Output| C
-            K -->|Output| D
-            L -->|API| F
-        end
-
-        B -->|9- Return unified data to user| A
-        C -->|10- Quick data access| B
-        G -->|11- Analytics & reporting| M[Business Intelligence Tools]
-    end
-
-    classDef primary fill:#f9f,stroke:#333,stroke-width:4px;
-    classDef secondary fill:#bbf,stroke:#333,stroke-width:2px;
-    classDef external fill:#ffa,stroke:#333,stroke-width:2px;
-    classDef groupBox fill:#ffffff,stroke:#000000,stroke-width:2px;
-
-    class A,B,C,D,E primary;
-    class G,H,I,J,K,L secondary;
-    class F,M external;
-    class Project,LocalFirstArchitecture,ExternalSystems,LongTermStorage,HexagonalArchitecture groupBox;
-```
-___
-# System Structure based Architect
-```mermaid
-%%{
-  init: {
-    'theme': 'base',
-    'themeVariables': {
-      'background': '#ffffff',
-      'primaryTextColor': '#000000',
-      'lineColor': '#000000',
-      'fontFamily': 'arial',
-      'clusterBkg': '#ffffff',
-      'clusterBorder': '#000000'
-    }
-  }
-}%%
-graph TD
-    subgraph Project ["Project"]
-        subgraph MobileApp ["Mobile App"]
-            A[mobile_app/lib/main.dart] --> B[screens]
-            A --> C[widgets]
-            A --> D[services]
-            D --> E[API Services]
-        end
-
-        subgraph Backend ["Backend"]
-            F[backend/app/main.py] --> G[api/routes.py]
-            F --> H[core/config.py]
-            F --> I[core/database.py]
-            
-            subgraph HexagonalArchitecture ["Hexagonal Architecture"]
-                J[domain/entities] --> K[domain/use_cases]
-                K --> L[adapters/controllers]
-                K --> M[adapters/repositories]
-                L --> N[ports/input_ports]
-                M --> O[ports/output_ports]
-            end
-            
-            G --> L
-            I --> M
-        end
-
-        subgraph StreamProcessing ["Stream Processing"]
-            P[stream_processing/flink_jobs/data_transformation.py]
-            Q[stream_processing/flink_jobs/api_fetcher.py]
-            R[stream_processing/kafka_config/topics.yml]
-        end
-
-        subgraph Databases ["Databases"]
-            S[databases/sqlite/init_schema.sql]
-            T[databases/postgresql/init_schema.sql]
-        end
-
-        subgraph DataSync ["Data Sync"]
-            U[data_sync/debezium/connector_config.json]
-            V[data_sync/symmetricds/sync_config.properties]
-        end
-
-        subgraph Deployment ["Deployment"]
-            W[deployment/docker-compose.yml]
-            X[deployment/kubernetes/backend-deployment.yaml]
-            Y[deployment/kubernetes/flink-deployment.yaml]
-            Z[deployment/kubernetes/database-deployment.yaml]
-        end
-
-        %% Interactions
-        E -.-> |HTTP Requests| G
-        O -.-> |Database Queries| S
-        O -.-> |Database Queries| T
-        Q -.-> |Fetch Data| ExternalAPI[External Vendor APIs]
-        P -.-> |Process Data| Q
-        P -.-> |Send/Receive Messages| R
-        U -.-> |Replicate Data| S
-        U -.-> |Replicate Data| T
-        V -.-> |Sync Data| S
-        V -.-> |Sync Data| T
-        W -.-> |Deploy| F
-        W -.-> |Deploy| P
-        W -.-> |Deploy| Q
-        X -.-> |Deploy| F
-        Y -.-> |Deploy| P
-        Y -.-> |Deploy| Q
-        Z -.-> |Deploy| S
-        Z -.-> |Deploy| T
-    end
-
-    %% Styling
-    classDef mobileApp fill:#f9f,stroke:#333,stroke-width:2px;
-    classDef backend fill:#bbf,stroke:#333,stroke-width:2px;
-    classDef streamProcessing fill:#bfb,stroke:#333,stroke-width:2px;
-    classDef database fill:#fbb,stroke:#333,stroke-width:2px;
-    classDef dataSync fill:#fbf,stroke:#333,stroke-width:2px;
-    classDef deployment fill:#bff,stroke:#333,stroke-width:2px;
-    classDef groupBox fill:#ffffff,stroke:#000000,stroke-width:2px;
-
-    class A,B,C,D,E mobileApp;
-    class F,G,H,I,J,K,L,M,N,O backend;
-    class P,Q,R streamProcessing;
-    class S,T database;
-    class U,V dataSync;
-    class W,X,Y,Z deployment;
-    class Project,MobileApp,Backend,HexagonalArchitecture,StreamProcessing,Databases,DataSync,Deployment groupBox;
-```
-___
-# Current structure:
-```
-multivendor-catalog/
-    .gitattributes
-    docker-compose.yml
-    readme.md
-    requirements.txt
-    backend/
-        app/
-            Dockerfile
-            main.py
-            api/
-                routes.py
-            core/
-                config.py
-                database.py
-                kafka_producer.py
-                postgres_database.py
-        flink_jobs/
-            debezium_sync.py
-            flink_job.py
-            debezium_connectors/
-                debezium-postgres-connector.json
-                debezium-sqlite-connector.json
-    databases/
-        postgresql/
-            init_postgres_schema.sql
-        sqlite/
-            init_schema.sql
-            products.db
-            seed_data.sql
-    flink/
-        Dockerfile
-    mobile_app/
-        assets/
-            images/
-                image.png
-        lib/
-            main.dart
-            screens/
-                product_list_screen.dart
-            services/
-    multivendor-catalog/
-        .gitattributes
-```
-
-
-==================================================
-
 requirements.txt :
 
 Binary file, content not displayed.
@@ -438,16 +219,19 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the requirements file into the container
-COPY ../../requirements.txt .
+COPY requirements.txt .
 
 # Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
-COPY ../../backend/app /app
+COPY . /app
 
 # Ensure the module imports work correctly
 ENV PYTHONPATH=/app
+
+# Expose the port FastAPI will run on
+EXPOSE 8000
 
 # Command to run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -457,57 +241,66 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 backend/app/main.py :
 
-# backend/app/main.py
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from api.routes import router
 from core.config import settings
+from core.logger import setup_logger, log_step
 import os
 import sqlite3
-import logging
 
-# Define the lifespan handler
+logger = setup_logger('main')
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logging.info("Starting up...")
+    log_step(logger, 1, "Starting up FastAPI application")
 
     # Startup event
     db_path = '/databases/sqlite/products.db'
+    log_step(logger, 2, f"Connecting to SQLite database: {db_path}")
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
     # Initialize schema
+    log_step(logger, 3, "Initializing SQLite schema")
     with open('/databases/sqlite/init_schema.sql') as f:
         conn.executescript(f.read())
 
     # Check if vendors table is empty
+    log_step(logger, 4, "Checking if vendors table is empty")
     cursor.execute("SELECT COUNT(*) FROM vendors;")
     result = cursor.fetchone()
     vendor_count = result[0] if result else 0
 
     if vendor_count == 0:
         # Seed the vendors data
+        log_step(logger, 5, "Seeding vendors data")
         seed_file_path = '/databases/sqlite/seed_data.sql'
         if os.path.exists(seed_file_path):
             with open(seed_file_path) as f:
                 conn.executescript(f.read())
+        log_step(logger, 6, "Vendors data seeded successfully")
+    else:
+        log_step(logger, 6, f"Vendors table already contains {vendor_count} records")
 
     conn.close()
+    log_step(logger, 7, "SQLite database connection closed")
 
     # Yield control to run the app
-    logging.info("Startup complete.")
+    log_step(logger, 8, "Startup complete. Yielding control to FastAPI")
     yield
-    logging.info("Shutting down...")
+    log_step(logger, 9, "Shutting down FastAPI application")
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
+log_step(logger, 10, "Including API router")
 app.include_router(router)
 
 origins = ["*"]
-
+    
+log_step(logger, 11, "Adding CORS middleware")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -516,24 +309,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+log_step(logger, 12, "FastAPI application setup complete")
 
 ==================================================
 
 backend/app/api/routes.py :
 
-# backend/app/api/routes.py
-
 from fastapi import APIRouter, Depends, HTTPException
 from core.database import get_db_connection
 from core.kafka_producer import send_data_to_kafka
+from core.logger import setup_logger, log_step
 
 router = APIRouter()
+logger = setup_logger('api_routes')
 
 @router.get("/products")
 def get_products(vendor_id: int = None, conn=Depends(get_db_connection)):
+    log_step(logger, 1, f"Received request for products. Vendor ID: {vendor_id}")
     cursor = conn.cursor()
     if vendor_id:
-        # Belirli bir satıcı için ürünleri getir
+        log_step(logger, 2, f"Fetching products for vendor ID: {vendor_id}")
         cursor.execute("""
             SELECT p.*
             FROM products p
@@ -541,68 +336,86 @@ def get_products(vendor_id: int = None, conn=Depends(get_db_connection)):
             WHERE pv.vendor_id = ?
         """, (vendor_id,))
     else:
-        # Tüm ürünleri getir
+        log_step(logger, 2, "Fetching all products")
         cursor.execute("SELECT * FROM products")
     products = cursor.fetchall()
 
     if not products:
-        # Veri yok, veri çekme sürecini başlat
+        log_step(logger, 3, "No products found. Initiating data fetch process.")
         if vendor_id:
+            log_step(logger, 4, f"Sending Kafka message for vendor ID: {vendor_id}")
             send_data_to_kafka({'vendor_id': vendor_id})
         else:
-            # Tüm satıcılar için veri çekme talebi gönder
+            log_step(logger, 4, "Sending Kafka messages for all vendors")
             cursor.execute("SELECT id FROM vendors")
             vendor_ids = cursor.fetchall()
             for vendor in vendor_ids:
+                log_step(logger, 5, f"Sending Kafka message for vendor ID: {vendor['id']}")
                 send_data_to_kafka({'vendor_id': vendor['id']})
+        log_step(logger, 6, "Raising HTTPException with status code 202")
         raise HTTPException(status_code=202, detail="Data is being fetched, please try again shortly.")
     
+    log_step(logger, 7, f"Returning {len(products)} products")
     return {"products": [dict(ix) for ix in products]}
 
 @router.post("/request-vendor-data")
 def request_vendor_data(vendor_id: int, conn=Depends(get_db_connection)):
-    # Check if vendor exists
+    log_step(logger, 1, f"Received request to fetch data for vendor ID: {vendor_id}")
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM vendors WHERE id = ?", (vendor_id,))
     vendor = cursor.fetchone()
     if not vendor:
+        log_step(logger, 2, f"Invalid vendor ID: {vendor_id}")
         raise HTTPException(status_code=400, detail="Invalid vendor_id")
-    # Send message to Kafka
+    log_step(logger, 3, f"Sending Kafka message for vendor ID: {vendor_id}")
     send_data_to_kafka({'vendor_id': vendor_id})
+    log_step(logger, 4, f"Data fetch request for vendor {vendor_id} has been sent")
     return {"message": f"Data fetch request for vendor {vendor_id} has been sent."}
-
 
 ==================================================
 
 backend/app/core/config.py :
 
 import os
+from core.logger import setup_logger, log_step
+
+logger = setup_logger('config')
 
 class Settings:
     PROJECT_NAME: str = "Unified Vendor Catalog"
     SQLALCHEMY_DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///../../databases/sqlite/products.db")
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
 settings = Settings()
 
+log_step(logger, 1, f"Configuration loaded: PROJECT_NAME={settings.PROJECT_NAME}, DATABASE_URL={settings.SQLALCHEMY_DATABASE_URL}, LOG_LEVEL={settings.LOG_LEVEL}")
 
 ==================================================
 
 backend/app/core/database.py :
 
-# backend/app/core/database.py
-
 import sqlite3
 from typing import Generator
+from core.logger import setup_logger, log_step
+
+logger = setup_logger('database')
 
 def get_db_connection() -> Generator:
     db_path = '/databases/sqlite/products.db'
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
+    log_step(logger, 1, f"Attempting to connect to database: {db_path}")
     try:
-        yield conn
-    finally:
-        conn.close()
-
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        log_step(logger, 2, "Database connection established successfully")
+        try:
+            yield conn
+        finally:
+            log_step(logger, 3, "Closing database connection")
+            conn.close()
+            log_step(logger, 4, "Database connection closed")
+    except sqlite3.Error as e:
+        log_step(logger, 5, f"Error connecting to database: {str(e)}")
+        raise
 
 ==================================================
 
@@ -612,12 +425,14 @@ from kafka import KafkaProducer
 import json
 import os
 import time
-import logging
+from core.logger import setup_logger, log_step
 
 # Kafka configuration
 KAFKA_BROKER_URL = os.getenv('KAFKA_BROKER_URL', 'kafka:9092')
 TOPIC_NAME = 'vendor_requests'
+MAX_MESSAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
+logger = setup_logger('kafka_producer')
 producer = None
 
 def get_kafka_producer():
@@ -625,37 +440,79 @@ def get_kafka_producer():
     if producer is None:
         for attempt in range(5):  # Retry up to 5 times
             try:
+                log_step(logger, 1, f"Attempting to connect to Kafka broker (Attempt {attempt + 1})")
                 producer = KafkaProducer(
                     bootstrap_servers=[KAFKA_BROKER_URL],
                     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-                    max_request_size=1048576,  # 1MB
+                    max_request_size=MAX_MESSAGE_SIZE,
                     buffer_memory=33554432,  # 32MB
+                    batch_size=16384,
+                    linger_ms=100,
                     max_block_ms=5000,
                     request_timeout_ms=30000,
                     api_version_auto_timeout_ms=5000
                 )
-                logging.info(f"Successfully connected to Kafka broker on attempt {attempt + 1}")
+                log_step(logger, 2, f"Successfully connected to Kafka broker on attempt {attempt + 1}")
                 break
             except Exception as e:
-                logging.warning(f"Attempt {attempt + 1}: Failed to connect to Kafka broker. Retrying in 5 seconds...")
-                logging.exception(e)
+                log_step(logger, 3, f"Failed to connect to Kafka broker on attempt {attempt + 1}. Error: {str(e)}")
                 time.sleep(5)
         else:
+            log_step(logger, 4, "Could not establish connection to Kafka broker after multiple attempts")
             raise Exception("Could not establish connection to Kafka broker after multiple attempts.")
     return producer
 
 def send_data_to_kafka(data):
     try:
+        log_step(logger, 5, f"Preparing to send data to Kafka topic: {TOPIC_NAME}")
         kafka_producer = get_kafka_producer()
+        serialized_data = json.dumps(data).encode('utf-8')
+        
+        if len(serialized_data) > MAX_MESSAGE_SIZE:
+            log_step(logger, 6, f"Data size ({len(serialized_data)} bytes) exceeds maximum message size ({MAX_MESSAGE_SIZE} bytes)")
+            # Implement data truncation or splitting logic here if needed
+        
+        log_step(logger, 7, "Sending data to Kafka")
         future = kafka_producer.send(TOPIC_NAME, value=data)
         result = future.get(timeout=10)
-        logging.info(f"Data sent to Kafka topic: {TOPIC_NAME}, partition: {result.partition}, offset: {result.offset}")
+        log_step(logger, 8, f"Data sent to Kafka topic: {TOPIC_NAME}, partition: {result.partition}, offset: {result.offset}")
     except Exception as e:
-        logging.error(f"Failed to send data to Kafka: {e}")
-        logging.exception(e)
+        log_step(logger, 9, f"Failed to send data to Kafka. Error: {str(e)}")
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+==================================================
+
+backend/app/core/logger.py :
+
+# backend/app/core/logger.py
+
+import logging
+import os
+from datetime import datetime
+
+def setup_logger(name):
+    log_dir = '/app/logs'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+
+    log_file = os.path.join(log_dir, 'app.log')
+    
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    return logger
+
+def log_step(logger, step, message):
+    logger.info(f"STEP {step}: {message}")
 
 ==================================================
 
@@ -664,6 +521,9 @@ backend/app/core/postgres_database.py :
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from core.logger import setup_logger, log_step
+
+logger = setup_logger('postgres_database')
 
 def get_postgres_connection():
     POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
@@ -672,17 +532,28 @@ def get_postgres_connection():
     POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
     POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
     
-    conn = psycopg2.connect(
-        dbname=POSTGRES_DB,
-        user=POSTGRES_USER,
-        password=POSTGRES_PASSWORD,
-        host=POSTGRES_HOST,
-        port=POSTGRES_PORT,
-        cursor_factory=RealDictCursor
-    )
+    log_step(logger, 1, f"Attempting to connect to PostgreSQL database: {POSTGRES_DB} on {POSTGRES_HOST}:{POSTGRES_PORT}")
     
-    return conn
+    try:
+        conn = psycopg2.connect(
+            dbname=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD,
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            cursor_factory=RealDictCursor
+        )
+        log_step(logger, 2, "Successfully connected to PostgreSQL database")
+        return conn
+    except psycopg2.Error as e:
+        log_step(logger, 3, f"Failed to connect to PostgreSQL database. Error: {str(e)}")
+        raise
 
+def close_postgres_connection(conn):
+    if conn:
+        log_step(logger, 4, "Closing PostgreSQL database connection")
+        conn.close()
+        log_step(logger, 5, "PostgreSQL database connection closed")
 
 ==================================================
 
@@ -693,45 +564,69 @@ from pyflink.datastream.connectors import FlinkKafkaConsumer
 from pyflink.common.serialization import SimpleStringSchema
 import psycopg2
 import json
+import os
+from backend.app.core.logger import setup_logger, log_step
+
+logger = setup_logger('debezium_sync')
 
 # Kafka configuration for CDC
-KAFKA_BROKER_URL = 'localhost:9092'
+KAFKA_BROKER_URL = os.getenv('KAFKA_BROKER_URL', 'kafka:9092')
 TOPIC_NAME = 'dbhistory.sqlite'
 
 def update_postgresql(data):
+    log_step(logger, 1, f"Updating PostgreSQL with operation: {data['op']}")
     pg_conn = psycopg2.connect(
-        dbname="product_catalog",
-        user="postgres",
-        password="password",
-        host="localhost",
-        port="5432"
+        dbname=os.getenv("POSTGRES_DB", "product_catalog"),
+        user=os.getenv("POSTGRES_USER", "postgres"),
+        password=os.getenv("POSTGRES_PASSWORD", "password"),
+        host=os.getenv("POSTGRES_HOST", "postgres"),
+        port=os.getenv("POSTGRES_PORT", "5432")
     )
     cursor = pg_conn.cursor()
 
-    if data['op'] == 'c':  # 'c' stands for create (insert)
-        cursor.execute(
-            "INSERT INTO products (name, description, price) VALUES (%s, %s, %s)",
-            (data['after']['name'], data['after']['description'], data['after']['price'])
-        )
-    elif data['op'] == 'u':  # 'u' stands for update
-        cursor.execute(
-            "UPDATE products SET name=%s, description=%s, price=%s WHERE id=%s",
-            (data['after']['name'], data['after']['description'], data['after']['price'], data['after']['id'])
-        )
-    elif data['op'] == 'd':  # 'd' stands for delete
-        cursor.execute(
-            "DELETE FROM products WHERE id=%s", (data['before']['id'],)
-        )
+    try:
+        if data['op'] == 'c':  # 'c' stands for create (insert)
+            log_step(logger, 2, "Inserting new record into PostgreSQL")
+            cursor.execute(
+                "INSERT INTO products (name, description, price) VALUES (%s, %s, %s)",
+                (data['after']['name'], data['after']['description'], data['after']['price'])
+            )
+        elif data['op'] == 'u':  # 'u' stands for update
+            log_step(logger, 2, f"Updating record in PostgreSQL with id: {data['after']['id']}")
+            cursor.execute(
+                "UPDATE products SET name=%s, description=%s, price=%s WHERE id=%s",
+                (data['after']['name'], data['after']['description'], data['after']['price'], data['after']['id'])
+            )
+        elif data['op'] == 'd':  # 'd' stands for delete
+            log_step(logger, 2, f"Deleting record from PostgreSQL with id: {data['before']['id']}")
+            cursor.execute(
+                "DELETE FROM products WHERE id=%s", (data['before']['id'],)
+            )
 
-    pg_conn.commit()
-    cursor.close()
-    pg_conn.close()
+        pg_conn.commit()
+        log_step(logger, 3, "PostgreSQL operation completed successfully")
+    except Exception as e:
+        log_step(logger, 3, f"Error updating PostgreSQL: {str(e)}")
+        pg_conn.rollback()
+    finally:
+        cursor.close()
+        pg_conn.close()
+        log_step(logger, 4, "PostgreSQL connection closed")
 
 def process_cdc_message(message):
-    data = json.loads(message)
-    update_postgresql(data)
+    log_step(logger, 5, "Processing CDC message")
+    try:
+        data = json.loads(message)
+        log_step(logger, 6, f"Parsed CDC message: {data}")
+        update_postgresql(data)
+        log_step(logger, 7, "CDC message processed successfully")
+    except json.JSONDecodeError as e:
+        log_step(logger, 7, f"Error decoding CDC message: {str(e)}")
+    except Exception as e:
+        log_step(logger, 7, f"Error processing CDC message: {str(e)}")
 
 def cdc_sync_job():
+    log_step(logger, 8, "Starting CDC sync job")
     env = StreamExecutionEnvironment.get_execution_environment()
 
     kafka_consumer = FlinkKafkaConsumer(
@@ -743,15 +638,17 @@ def cdc_sync_job():
         }
     )
 
+    log_step(logger, 9, f"Created Kafka consumer for topic: {TOPIC_NAME}")
+
     kafka_stream = env.add_source(kafka_consumer)
     
     kafka_stream.map(process_cdc_message)
     
+    log_step(logger, 10, "Executing Flink CDC Sync Job")
     env.execute("Flink CDC Sync Job")
 
 if __name__ == '__main__':
     cdc_sync_job()
-
 
 ==================================================
 
@@ -763,130 +660,86 @@ from pyflink.common.serialization import SimpleStringSchema
 import sqlite3
 import json
 import requests
-import logging
+import os
+from backend.app.core.logger import setup_logger, log_step
+
+logger = setup_logger('flink_job')
 
 # Kafka configuration
-KAFKA_BROKER_URL = 'kafka:9092'  # Use 'kafka' as the service name within Docker
+KAFKA_BROKER_URL = os.getenv('KAFKA_BROKER_URL', 'kafka:9092')
 TOPIC_NAME = 'vendor_requests'
 
 DEFAULT_IMAGE = 'image.png'
-logging.basicConfig(level=logging.INFO)
 
 def get_vendor_api_url(vendor_id):
-    conn = sqlite3.connect('/databases/sqlite/products.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT api_url FROM vendors WHERE id = ?", (vendor_id,))
-    result = cursor.fetchone()
-    conn.close()
-    if result:
-        return result[0]
-    else:
+    try:
+        log_step(logger, 1, f"Fetching API URL for vendor {vendor_id}")
+        conn = sqlite3.connect('/databases/sqlite/products.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT api_url FROM vendors WHERE id = ?", (vendor_id,))
+        result = cursor.fetchone()
+        conn.close()
+        if result:
+            log_step(logger, 2, f"Found API URL for vendor {vendor_id}: {result[0]}")
+            return result[0]
+        else:
+            log_step(logger, 2, f"No API URL found for vendor {vendor_id}")
+            return None
+    except Exception as e:
+        log_step(logger, 2, f"Error fetching vendor API URL: {str(e)}")
         return None
 
-def insert_into_sqlite(products):
+def insert_into_sqlite(products, vendor_id):
     try:
+        log_step(logger, 3, f"Inserting {len(products)} products into SQLite for vendor {vendor_id}")
         conn = sqlite3.connect('/databases/sqlite/products.db')
         cursor = conn.cursor()
 
         for product in products:
             cursor.execute(
                 """
-                INSERT OR IGNORE INTO products (id, name, description, price)
+                INSERT OR REPLACE INTO products (id, name, description, price)
                 VALUES (?, ?, ?, ?)
                 """,
                 (product['id'], product['title'], DEFAULT_IMAGE, product['price'])
             )
-        conn.commit()
-        conn.close()
-        logging.info(f"Inserted {len(products)} products into SQLite")
-    except Exception as e:
-        logging.exception(f"Exception occurred while inserting into SQLite: {e}")
-    try:
-        conn = sqlite3.connect('/databases/sqlite/products.db')
-        cursor = conn.cursor()
-
-        for product in products:
             cursor.execute(
                 """
-                INSERT OR IGNORE INTO products (id, name, description, price)
-                VALUES (?, ?, ?, ?)
+                INSERT OR REPLACE INTO products_vendors (product_id, vendor_id)
+                VALUES (?, ?)
                 """,
-                (product['id'], product['title'], DEFAULT_IMAGE, product['price'])
+                (product['id'], vendor_id)
             )
         conn.commit()
         conn.close()
-        logging.info(f"Inserted {len(products)} products into SQLite")
+        log_step(logger, 4, f"Successfully inserted {len(products)} products into SQLite for vendor {vendor_id}")
     except Exception as e:
-        logging.exception(f"Exception occurred while inserting into SQLite: {e}")
-    conn = sqlite3.connect('/databases/sqlite/products.db')
-    cursor = conn.cursor()
-
-    for product in products:
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO products (id, name, description, price)
-            VALUES (?, ?, ?, ?)
-            """,
-            (product['id'], product['title'], DEFAULT_IMAGE, product['price'])
-        )
-    conn.commit()
-    conn.close()
-
-def insert_into_products_vendors(products, vendor_id):
-    conn = sqlite3.connect('/databases/sqlite/products.db')
-    cursor = conn.cursor()
-
-    for product in products:
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO products_vendors (product_id, vendor_id)
-            VALUES (?, ?)
-            """,
-            (product['id'], vendor_id)
-        )
-    conn.commit()
-    conn.close()
+        log_step(logger, 4, f"Error inserting products into SQLite: {str(e)}")
 
 def process_message(message):
     try:
-        logging.info(f"Received message: {message}")
+        log_step(logger, 5, f"Processing message: {message}")
         data = json.loads(message)
         vendor_id = data.get('vendor_id')
 
         api_url = get_vendor_api_url(vendor_id)
-        logging.info(f"Fetching data from API URL: {api_url}")
-        if api_url:
-            response = requests.get(api_url)
-            logging.info(f"API response status: {response.status_code}")
-            if response.status_code == 200:
-                products = response.json().get('products', [])
-                logging.info(f"Fetched {len(products)} products from vendor {vendor_id}")
-                insert_into_sqlite(products)
-                insert_into_products_vendors(products, vendor_id)
-                logging.info(f"Inserted products into SQLite for vendor {vendor_id}")
-            else:
-                logging.error(f"Failed to fetch data from vendor {vendor_id}, status code: {response.status_code}")
-        else:
-            logging.error(f"Vendor with ID {vendor_id} not found")
-    except Exception as e:
-        logging.exception(f"Exception occurred while processing message: {e}")
-    data = json.loads(message)
-    vendor_id = data.get('vendor_id')
+        if not api_url:
+            log_step(logger, 6, f"Vendor with ID {vendor_id} not found or has no API URL")
+            return
 
-    api_url = get_vendor_api_url(vendor_id)
-    if api_url:
+        log_step(logger, 7, f"Fetching data from API URL: {api_url}")
         response = requests.get(api_url)
         if response.status_code == 200:
             products = response.json().get('products', [])
-            insert_into_sqlite(products)
-            insert_into_products_vendors(products, vendor_id)
-            print(f"Fetched and inserted products from vendor {vendor_id}")
+            log_step(logger, 8, f"Fetched {len(products)} products from vendor {vendor_id}")
+            insert_into_sqlite(products, vendor_id)
         else:
-            print(f"Failed to fetch data from vendor {vendor_id}")
-    else:
-        print(f"Vendor with ID {vendor_id} not found")
+            log_step(logger, 8, f"Failed to fetch data from vendor {vendor_id}, status code: {response.status_code}")
+    except Exception as e:
+        log_step(logger, 9, f"Exception occurred while processing message: {str(e)}")
 
 def flink_job():
+    log_step(logger, 10, "Starting Flink job")
     env = StreamExecutionEnvironment.get_execution_environment()
 
     kafka_consumer = FlinkKafkaConsumer(
@@ -897,26 +750,26 @@ def flink_job():
             'group.id': 'flink_consumer',
             'auto.offset.reset': 'earliest'
         }
-)
+    )
+
+    log_step(logger, 11, f"Created Kafka consumer for topic: {TOPIC_NAME}")
 
     kafka_stream = env.add_source(kafka_consumer)
-
-    # Process each message from Kafka
     kafka_stream.map(process_message)
 
+    log_step(logger, 12, "Executing Flink Vendor Data Fetch Job")
     env.execute("Flink Vendor Data Fetch Job")
 
 if __name__ == '__main__':
     flink_job()
-
 
 ==================================================
 
 backend/flink_jobs/debezium_connectors/debezium-postgres-connector.json :
 
 {
-    "name": "postgres-connector",
-    "config": {
+  "name": "postgres-connector",
+  "config": {
       "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
       "database.hostname": "postgres",
       "database.port": "5432",
@@ -924,30 +777,46 @@ backend/flink_jobs/debezium_connectors/debezium-postgres-connector.json :
       "database.password": "password",
       "database.dbname": "product_catalog",
       "database.server.name": "postgres_server",
+      "table.include.list": "public.products,public.vendors",
       "plugin.name": "pgoutput",
       "slot.name": "debezium_slot",
       "publication.name": "debezium_publication",
       "database.history.kafka.bootstrap.servers": "kafka:9092",
-      "database.history.kafka.topic": "dbhistory.postgres"
-    }
+      "database.history.kafka.topic": "schema-changes.product_catalog",
+      "transforms": "unwrap",
+      "transforms.unwrap.type": "io.debezium.transforms.UnwrapFromEnvelope",
+      "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "key.converter.schemas.enable": "false",
+      "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "value.converter.schemas.enable": "false"
   }
-  
+}
 
 ==================================================
 
 backend/flink_jobs/debezium_connectors/debezium-sqlite-connector.json :
 
 {
-    "name": "sqlite-connector",
-    "config": {
+  "name": "sqlite-connector",
+  "config": {
       "connector.class": "io.debezium.connector.sqlite.SqliteConnector",
-      "database.filename": "/var/lib/sqlite/products.db",
+      "database.hostname": "fastapi",
+      "database.port": "8000",
+      "database.user": "debezium",
+      "database.password": "dbz",
+      "database.dbname": "/databases/sqlite/products.db",
       "database.server.name": "sqlite_server",
+      "table.include.list": "products,vendors",
       "database.history.kafka.bootstrap.servers": "kafka:9092",
-      "database.history.kafka.topic": "dbhistory.sqlite"
-    }
+      "database.history.kafka.topic": "schema-changes.sqlite",
+      "transforms": "unwrap",
+      "transforms.unwrap.type": "io.debezium.transforms.UnwrapFromEnvelope",
+      "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "key.converter.schemas.enable": "false",
+      "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+      "value.converter.schemas.enable": "false"
   }
-  
+}
 
 ==================================================
 
@@ -1052,91 +921,65 @@ mobile_app/lib/main.dart :
 
 import 'package:flutter/material.dart';
 import 'screens/product_list_screen.dart';
+import 'services/logger_service.dart';
 
 void main() {
-  runApp(MyApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  final logger = LoggerService();
+  logger.info('Application started');
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key}); // Use 'super.key' directly in the constructor
+
   @override
   Widget build(BuildContext context) {
+    final logger = LoggerService();
+    logger.debug('Building MyApp');
     return MaterialApp(
       title: 'Unified Vendor Catalog',
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: ProductListScreen(),
+      home: const MyHomePage(title: 'Unified Vendor Catalog'),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+  const MyHomePage(
+      {super.key,
+      required this.title}); // Use 'super.key' directly in the constructor
 
   final String title;
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  MyHomePageState createState() =>
+      MyHomePageState(); // Make the state class public by removing the underscore
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class MyHomePageState extends State<MyHomePage> {
+  final logger = LoggerService();
   int _counter = 0;
 
   void _incrementCounter() {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
       _counter++;
     });
+    logger.debug('Counter incremented to $_counter');
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    logger.debug('Building MyHomePage');
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             const Text(
@@ -1146,6 +989,17 @@ class _MyHomePageState extends State<MyHomePage> {
               '$_counter',
               style: Theme.of(context).textTheme.headlineMedium,
             ),
+            ElevatedButton(
+              onPressed: () {
+                logger.info('Navigating to ProductListScreen');
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const ProductListScreen()),
+                );
+              },
+              child: const Text('Go to Product List'),
+            ),
           ],
         ),
       ),
@@ -1153,7 +1007,7 @@ class _MyHomePageState extends State<MyHomePage> {
         onPressed: _incrementCounter,
         tooltip: 'Increment',
         child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ),
     );
   }
 }
@@ -1166,48 +1020,66 @@ mobile_app/lib/screens/product_list_screen.dart :
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../services/logger_service.dart';
 
 class ProductListScreen extends StatefulWidget {
   final int? vendorId;
 
-  ProductListScreen({this.vendorId});
+  const ProductListScreen({super.key, this.vendorId});
 
   @override
-  _ProductListScreenState createState() => _ProductListScreenState();
+  ProductListScreenState createState() => ProductListScreenState();
 }
 
-class _ProductListScreenState extends State<ProductListScreen> {
+class ProductListScreenState extends State<ProductListScreen> {
   List products = [];
   bool isLoading = true;
   String message = '';
+  final LoggerService logger = LoggerService();
 
   @override
   void initState() {
     super.initState();
+    logger.info('ProductListScreen initialized');
     fetchProducts();
   }
 
-  void fetchProducts() async {
+  Future<void> fetchProducts() async {
     String url = 'http://10.0.2.2:8000/products';
     if (widget.vendorId != null) {
       url += '?vendor_id=${widget.vendorId}';
     }
-    final response = await http.get(Uri.parse(url));
+    logger.debug('Fetching products from URL: $url');
 
-    if (response.statusCode == 200) {
+    try {
+      final response = await http.get(Uri.parse(url));
+      logger
+          .debug('Received response with status code: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        setState(() {
+          products = json.decode(response.body)['products'];
+          isLoading = false;
+        });
+        logger.info('Successfully loaded ${products.length} products');
+      } else if (response.statusCode == 202) {
+        logger.info('Data is being fetched, waiting to retry');
+        setState(() {
+          message = 'Data is being fetched, please wait...';
+        });
+        Future.delayed(const Duration(seconds: 5), fetchProducts);
+      } else {
+        logger.error(
+            'Failed to load products. Status code: ${response.statusCode}');
+        setState(() {
+          message = 'Failed to load products';
+          isLoading = false;
+        });
+      }
+    } catch (e, stackTrace) {
+      logger.error('Error fetching products', e, stackTrace);
       setState(() {
-        products = json.decode(response.body)['products'];
-        isLoading = false;
-      });
-    } else if (response.statusCode == 202) {
-      // Veri çekiliyor, biraz bekleyip tekrar dene
-      setState(() {
-        message = 'Data is being fetched, please wait...';
-      });
-      Future.delayed(Duration(seconds: 5), fetchProducts);
-    } else {
-      setState(() {
-        message = 'Failed to load products';
+        message = 'Error: ${e.toString()}';
         isLoading = false;
       });
     }
@@ -1215,27 +1087,32 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    logger.debug('Building ProductListScreen. isLoading: $isLoading');
     if (isLoading) {
       return Scaffold(
         appBar: AppBar(
-          title: Text('Product List'),
+          title: const Text('Product List'),
         ),
         body: Center(
-          child: message.isEmpty ? CircularProgressIndicator() : Text(message),
+          child: message.isEmpty
+              ? const CircularProgressIndicator()
+              : Text(message),
         ),
       );
     } else {
       return Scaffold(
         appBar: AppBar(
-          title: Text('Product List'),
+          title: const Text('Product List'),
         ),
         body: ListView.builder(
           itemCount: products.length,
           itemBuilder: (context, index) {
             final product = products[index];
+            logger.debug('Building list item for product: ${product['name']}');
             return ListTile(
-              leading:
-                  Image.asset('assets/images/image.png'), // Varsayılan resim
+              leading: const Image(
+                image: AssetImage('assets/images/image.png'),
+              ),
               title: Text(product['name']),
               subtitle: Text('\$${product['price']}'),
             );
@@ -1249,10 +1126,104 @@ class _ProductListScreenState extends State<ProductListScreen> {
 
 ==================================================
 
-multivendor-catalog/.gitattributes :
+mobile_app/lib/services/logger_service.dart :
 
-# Auto detect text files and perform LF normalization
-* text=auto
+import 'dart:io' as io;
+import 'dart:convert'; // Required for Encoding, utf8
+import 'package:logger/logger.dart';
+import 'package:path/path.dart' as path;
+
+class LoggerService {
+  static final LoggerService _instance = LoggerService._internal();
+  late Logger logger;
+  io.File? logFile;
+
+  factory LoggerService() {
+    return _instance;
+  }
+
+  LoggerService._internal() {
+    _initLogger();
+  }
+
+  void _initLogger() {
+    if (!_isWeb()) {
+      final String logFilePath = _getLogFilePath();
+      logFile = io.File(logFilePath);
+    }
+
+    logger = Logger(
+      printer: PrettyPrinter(),
+      output: _isWeb() ? null : FileOutput(file: logFile!),
+    );
+  }
+
+  String _getLogFilePath() {
+    final String projectRoot =
+        _isWeb() ? '' : path.dirname(io.Platform.resolvedExecutable);
+    final logsDir = io.Directory(path.join(projectRoot, 'logs'));
+    if (!logsDir.existsSync()) {
+      logsDir.createSync();
+    }
+    return path.join(logsDir.path, 'flutter_app.log');
+  }
+
+  bool _isWeb() {
+    try {
+      return identical(0, 0.0);
+    } catch (e) {
+      return true;
+    }
+  }
+
+  void info(String message) {
+    logger.i(message);
+  }
+
+  void debug(String message) {
+    logger.d(message);
+  }
+
+  void error(String message, [dynamic error, StackTrace? stackTrace]) {
+    final errorMessage = '$message Error: $error, StackTrace: $stackTrace';
+    logger.e(errorMessage);
+  }
+
+  void warning(String message) {
+    logger.w(message);
+  }
+
+  Future<String> getLogFilePath() async {
+    return logFile?.path ?? '';
+  }
+
+  Future<String> getLogs() async {
+    return logFile?.readAsString() ?? '';
+  }
+
+  Future<void> clearLogs() async {
+    await logFile?.writeAsString('');
+  }
+}
+
+class FileOutput extends LogOutput {
+  final io.File file;
+  final bool overrideExisting;
+  final Encoding encoding;
+
+  FileOutput({
+    required this.file,
+    this.overrideExisting = false,
+    this.encoding = utf8,
+  });
+
+  @override
+  void output(OutputEvent event) {
+    final output = event.lines.join('\n');
+    file.writeAsStringSync('$output\n',
+        mode: io.FileMode.append, encoding: encoding);
+  }
+}
 
 
 ==================================================

@@ -21,5 +21,8 @@ COPY ../../backend/app /app
 # Ensure the module imports work correctly
 ENV PYTHONPATH=/app
 
+# Expose the port FastAPI will run on
+EXPOSE 8000
+
 # Command to run the application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

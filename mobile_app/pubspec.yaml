@@ -31,6 +31,9 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^0.13.4
+  logger: ^1.1.0
+  path_provider: ^2.0.11  # Add this package for file management on mobile
+  path: ^1.8.1  # This is already in your project for path operations
 
 
 

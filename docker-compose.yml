@@ -33,19 +33,28 @@ services:
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'  # Otomatik konu oluşturmayı etkinleştir
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_MESSAGE_MAX_BYTES: '5242880'  # 5 MB
+      KAFKA_MAX_REQUEST_SIZE: '5242880'  # 5 MB
+      KAFKA_RECEIVE_BUFFER_BYTES: '10485760'  # 10 MB
+      KAFKA_SEND_BUFFER_BYTES: '10485760'  # 10 MB
     depends_on:
       - zookeeper
     networks:
       - app_network
+
 
   zookeeper:
     image: wurstmeister/zookeeper:latest
     container_name: zookeeper_service
     ports:
       - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     networks:
       - app_network
+
 
   postgres:
     image: postgres:13
@@ -65,6 +74,8 @@ services:
   debezium:
     image: debezium/connect:latest
     container_name: debezium_service
+    ports:
+      - "8083:8083"
     environment:
       BOOTSTRAP_SERVERS: kafka:9092
       GROUP_ID: 1
@@ -74,6 +85,10 @@ services:
       CONNECT_BOOTSTRAP_SERVERS: kafka:9092  # Debezium için eklenmesi gereken
     ports:
       - "8083:8083"
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
     depends_on:
       - kafka
     networks:

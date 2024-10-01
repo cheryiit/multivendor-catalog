@@ -4,130 +4,86 @@ from pyflink.common.serialization import SimpleStringSchema
 import sqlite3
 import json
 import requests
-import logging
+import os
+from backend.app.core.logger import setup_logger, log_step
+
+logger = setup_logger('flink_job')
 
 # Kafka configuration
-KAFKA_BROKER_URL = 'kafka:9092'  # Use 'kafka' as the service name within Docker
+KAFKA_BROKER_URL = os.getenv('KAFKA_BROKER_URL', 'kafka:9092')
 TOPIC_NAME = 'vendor_requests'
 
 DEFAULT_IMAGE = 'image.png'
-logging.basicConfig(level=logging.INFO)
 
 def get_vendor_api_url(vendor_id):
-    conn = sqlite3.connect('/databases/sqlite/products.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT api_url FROM vendors WHERE id = ?", (vendor_id,))
-    result = cursor.fetchone()
-    conn.close()
-    if result:
-        return result[0]
-    else:
+    try:
+        log_step(logger, 1, f"Fetching API URL for vendor {vendor_id}")
+        conn = sqlite3.connect('/databases/sqlite/products.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT api_url FROM vendors WHERE id = ?", (vendor_id,))
+        result = cursor.fetchone()
+        conn.close()
+        if result:
+            log_step(logger, 2, f"Found API URL for vendor {vendor_id}: {result[0]}")
+            return result[0]
+        else:
+            log_step(logger, 2, f"No API URL found for vendor {vendor_id}")
+            return None
+    except Exception as e:
+        log_step(logger, 2, f"Error fetching vendor API URL: {str(e)}")
         return None
 
-def insert_into_sqlite(products):
+def insert_into_sqlite(products, vendor_id):
     try:
+        log_step(logger, 3, f"Inserting {len(products)} products into SQLite for vendor {vendor_id}")
         conn = sqlite3.connect('/databases/sqlite/products.db')
         cursor = conn.cursor()
 
         for product in products:
             cursor.execute(
                 """
-                INSERT OR IGNORE INTO products (id, name, description, price)
+                INSERT OR REPLACE INTO products (id, name, description, price)
                 VALUES (?, ?, ?, ?)
                 """,
                 (product['id'], product['title'], DEFAULT_IMAGE, product['price'])
             )
-        conn.commit()
-        conn.close()
-        logging.info(f"Inserted {len(products)} products into SQLite")
-    except Exception as e:
-        logging.exception(f"Exception occurred while inserting into SQLite: {e}")
-    try:
-        conn = sqlite3.connect('/databases/sqlite/products.db')
-        cursor = conn.cursor()
-
-        for product in products:
             cursor.execute(
                 """
-                INSERT OR IGNORE INTO products (id, name, description, price)
-                VALUES (?, ?, ?, ?)
+                INSERT OR REPLACE INTO products_vendors (product_id, vendor_id)
+                VALUES (?, ?)
                 """,
-                (product['id'], product['title'], DEFAULT_IMAGE, product['price'])
+                (product['id'], vendor_id)
             )
         conn.commit()
         conn.close()
-        logging.info(f"Inserted {len(products)} products into SQLite")
+        log_step(logger, 4, f"Successfully inserted {len(products)} products into SQLite for vendor {vendor_id}")
     except Exception as e:
-        logging.exception(f"Exception occurred while inserting into SQLite: {e}")
-    conn = sqlite3.connect('/databases/sqlite/products.db')
-    cursor = conn.cursor()
-
-    for product in products:
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO products (id, name, description, price)
-            VALUES (?, ?, ?, ?)
-            """,
-            (product['id'], product['title'], DEFAULT_IMAGE, product['price'])
-        )
-    conn.commit()
-    conn.close()
-
-def insert_into_products_vendors(products, vendor_id):
-    conn = sqlite3.connect('/databases/sqlite/products.db')
-    cursor = conn.cursor()
-
-    for product in products:
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO products_vendors (product_id, vendor_id)
-            VALUES (?, ?)
-            """,
-            (product['id'], vendor_id)
-        )
-    conn.commit()
-    conn.close()
+        log_step(logger, 4, f"Error inserting products into SQLite: {str(e)}")
 
 def process_message(message):
     try:
-        logging.info(f"Received message: {message}")
+        log_step(logger, 5, f"Processing message: {message}")
         data = json.loads(message)
         vendor_id = data.get('vendor_id')
 
         api_url = get_vendor_api_url(vendor_id)
-        logging.info(f"Fetching data from API URL: {api_url}")
-        if api_url:
-            response = requests.get(api_url)
-            logging.info(f"API response status: {response.status_code}")
-            if response.status_code == 200:
-                products = response.json().get('products', [])
-                logging.info(f"Fetched {len(products)} products from vendor {vendor_id}")
-                insert_into_sqlite(products)
-                insert_into_products_vendors(products, vendor_id)
-                logging.info(f"Inserted products into SQLite for vendor {vendor_id}")
-            else:
-                logging.error(f"Failed to fetch data from vendor {vendor_id}, status code: {response.status_code}")
-        else:
-            logging.error(f"Vendor with ID {vendor_id} not found")
-    except Exception as e:
-        logging.exception(f"Exception occurred while processing message: {e}")
-    data = json.loads(message)
-    vendor_id = data.get('vendor_id')
+        if not api_url:
+            log_step(logger, 6, f"Vendor with ID {vendor_id} not found or has no API URL")
+            return
 
-    api_url = get_vendor_api_url(vendor_id)
-    if api_url:
+        log_step(logger, 7, f"Fetching data from API URL: {api_url}")
         response = requests.get(api_url)
         if response.status_code == 200:
             products = response.json().get('products', [])
-            insert_into_sqlite(products)
-            insert_into_products_vendors(products, vendor_id)
-            print(f"Fetched and inserted products from vendor {vendor_id}")
+            log_step(logger, 8, f"Fetched {len(products)} products from vendor {vendor_id}")
+            insert_into_sqlite(products, vendor_id)
         else:
-            print(f"Failed to fetch data from vendor {vendor_id}")
-    else:
-        print(f"Vendor with ID {vendor_id} not found")
+            log_step(logger, 8, f"Failed to fetch data from vendor {vendor_id}, status code: {response.status_code}")
+    except Exception as e:
+        log_step(logger, 9, f"Exception occurred while processing message: {str(e)}")
 
 def flink_job():
+    log_step(logger, 10, "Starting Flink job")
     env = StreamExecutionEnvironment.get_execution_environment()
 
     kafka_consumer = FlinkKafkaConsumer(
@@ -138,13 +94,14 @@ def flink_job():
             'group.id': 'flink_consumer',
             'auto.offset.reset': 'earliest'
         }
-)
+    )
+
+    log_step(logger, 11, f"Created Kafka consumer for topic: {TOPIC_NAME}")
 
     kafka_stream = env.add_source(kafka_consumer)
-
-    # Process each message from Kafka
     kafka_stream.map(process_message)
 
+    log_step(logger, 12, "Executing Flink Vendor Data Fetch Job")
     env.execute("Flink Vendor Data Fetch Job")
 
 if __name__ == '__main__':
