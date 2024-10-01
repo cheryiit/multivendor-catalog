@@ -7,6 +7,7 @@ services:
     volumes:
       - ./backend/app:/app
       - ./databases/sqlite:/databases/sqlite
+      - ./logs:/app/logs
     ports:
       - "8000:8000"
     environment:
@@ -17,9 +18,13 @@ services:
     depends_on:
       - kafka
       - postgres
-      - debezium
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   kafka:
     image: wurstmeister/kafka:latest
@@ -34,14 +39,19 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
-      KAFKA_MESSAGE_MAX_BYTES: '5242880'  # 5 MB
-      KAFKA_MAX_REQUEST_SIZE: '5242880'  # 5 MB
+      KAFKA_MESSAGE_MAX_BYTES: '10485760'  # 10 MB
+      KAFKA_MAX_REQUEST_SIZE: '10485760'  # 10 MB
       KAFKA_RECEIVE_BUFFER_BYTES: '10485760'  # 10 MB
       KAFKA_SEND_BUFFER_BYTES: '10485760'  # 10 MB
     depends_on:
       - zookeeper
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --list --bootstrap-server localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   zookeeper:
     image: wurstmeister/zookeeper:latest
@@ -53,6 +63,11 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   postgres:
     image: postgres:13
@@ -68,6 +83,11 @@ services:
       - "5432:5432"
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   debezium:
     image: debezium/connect:latest
@@ -87,8 +107,14 @@ services:
       - CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE=false
     depends_on:
       - kafka
+      - postgres
     networks:
       - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8083/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   flink-jobmanager:
     build:
@@ -100,32 +126,56 @@ services:
     environment:
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
     volumes:
-      - ./backend/flink_jobs:/flink_jobs
+      - ./backend/flink_jobs:/opt/flink/jobs
       - ./databases/sqlite:/databases/sqlite
+      - ./logs:/opt/flink/logs
     networks:
       - app_network
     depends_on:
       - kafka
-    entrypoint: >
-      /bin/sh -c "
-      /docker-entrypoint.sh jobmanager;
-      flink run -d -py /flink_jobs/flink_job.py
-      "
+    command: jobmanager
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/overview"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   flink-taskmanager:
     build:
       context: .
       dockerfile: flink/Dockerfile
     container_name: flink_taskmanager
-    depends_on:
-      - flink-jobmanager
-    command: ["taskmanager"]
     environment:
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
     volumes:
+      - ./backend/flink_jobs:/opt/flink/jobs
       - ./databases/sqlite:/databases/sqlite
+      - ./logs:/opt/flink/logs
     networks:
       - app_network
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+
+  flink-job-submitter:
+    build:
+      context: .
+      dockerfile: flink/Dockerfile
+    container_name: flink_job_submitter
+    volumes:
+      - ./backend/flink_jobs:/opt/flink/jobs
+    networks:
+      - app_network
+    depends_on:
+      - flink-jobmanager
+      - flink-taskmanager
+    command: >
+      /bin/bash -c "
+      echo 'Waiting for Flink JobManager to be ready...' &&
+      sleep 30 &&
+      echo 'Submitting Flink job...' &&
+      flink run -d -py /opt/flink/jobs/flink_job.py
+      "
 
 volumes:
   postgres_data:

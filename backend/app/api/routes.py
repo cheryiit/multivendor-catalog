@@ -21,24 +21,36 @@ def get_products(vendor_id: int = None, conn=Depends(get_db_connection)):
     else:
         log_step(logger, 2, "Fetching all products")
         cursor.execute("SELECT * FROM products")
+    
     products = cursor.fetchall()
+    log_step(logger, 3, f"Fetched {len(products)} products")
 
     if not products:
-        log_step(logger, 3, "No products found. Initiating data fetch process.")
+        log_step(logger, 4, "No products found. Checking vendors table.")
+        cursor.execute("SELECT COUNT(*) FROM vendors")
+        vendor_count = cursor.fetchone()[0]
+        log_step(logger, 5, f"Found {vendor_count} vendors in the database")
+
+        if vendor_count == 0:
+            log_step(logger, 6, "No vendors found. Please check if the database is properly seeded.")
+            raise HTTPException(status_code=404, detail="No vendors found in the database")
+
+        log_step(logger, 7, "Initiating data fetch process")
         if vendor_id:
-            log_step(logger, 4, f"Sending Kafka message for vendor ID: {vendor_id}")
+            log_step(logger, 8, f"Sending Kafka message for vendor ID: {vendor_id}")
             send_data_to_kafka({'vendor_id': vendor_id})
         else:
-            log_step(logger, 4, "Sending Kafka messages for all vendors")
+            log_step(logger, 8, "Sending Kafka messages for all vendors")
             cursor.execute("SELECT id FROM vendors")
             vendor_ids = cursor.fetchall()
             for vendor in vendor_ids:
-                log_step(logger, 5, f"Sending Kafka message for vendor ID: {vendor['id']}")
+                log_step(logger, 9, f"Sending Kafka message for vendor ID: {vendor['id']}")
                 send_data_to_kafka({'vendor_id': vendor['id']})
-        log_step(logger, 6, "Raising HTTPException with status code 202")
+        
+        log_step(logger, 10, "Raising HTTPException with status code 202")
         raise HTTPException(status_code=202, detail="Data is being fetched, please try again shortly.")
     
-    log_step(logger, 7, f"Returning {len(products)} products")
+    log_step(logger, 11, f"Returning {len(products)} products")
     return {"products": [dict(ix) for ix in products]}
 
 @router.post("/request-vendor-data")

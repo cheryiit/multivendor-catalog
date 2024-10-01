@@ -17,6 +17,8 @@ class ProductListScreenState extends State<ProductListScreen> {
   bool isLoading = true;
   String message = '';
   final LoggerService logger = LoggerService();
+  int retryCount = 0;
+  static const int maxRetries = 3;
 
   @override
   void initState() {
@@ -36,11 +38,14 @@ class ProductListScreenState extends State<ProductListScreen> {
       final response = await http.get(Uri.parse(url));
       logger
           .debug('Received response with status code: ${response.statusCode}');
+      logger.debug('Response body: ${response.body}');
 
       if (response.statusCode == 200) {
+        final decodedBody = json.decode(response.body);
         setState(() {
-          products = json.decode(response.body)['products'];
+          products = decodedBody['products'];
           isLoading = false;
+          message = '';
         });
         logger.info('Successfully loaded ${products.length} products');
       } else if (response.statusCode == 202) {
@@ -48,12 +53,23 @@ class ProductListScreenState extends State<ProductListScreen> {
         setState(() {
           message = 'Data is being fetched, please wait...';
         });
-        Future.delayed(const Duration(seconds: 5), fetchProducts);
+        if (retryCount < maxRetries) {
+          retryCount++;
+          logger.debug('Retry attempt $retryCount of $maxRetries');
+          Future.delayed(const Duration(seconds: 5), fetchProducts);
+        } else {
+          setState(() {
+            isLoading = false;
+            message = 'Failed to load products after $maxRetries attempts';
+          });
+          logger.error('Max retry attempts reached');
+        }
       } else {
         logger.error(
             'Failed to load products. Status code: ${response.statusCode}');
         setState(() {
-          message = 'Failed to load products';
+          message =
+              'Failed to load products. Status code: ${response.statusCode}';
           isLoading = false;
         });
       }
@@ -69,37 +85,44 @@ class ProductListScreenState extends State<ProductListScreen> {
   @override
   Widget build(BuildContext context) {
     logger.debug('Building ProductListScreen. isLoading: $isLoading');
-    if (isLoading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Product List'),
-        ),
-        body: Center(
-          child: message.isEmpty
-              ? const CircularProgressIndicator()
-              : Text(message),
-        ),
-      );
-    } else {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Product List'),
-        ),
-        body: ListView.builder(
-          itemCount: products.length,
-          itemBuilder: (context, index) {
-            final product = products[index];
-            logger.debug('Building list item for product: ${product['name']}');
-            return ListTile(
-              leading: const Image(
-                image: AssetImage('assets/images/image.png'),
-              ),
-              title: Text(product['name']),
-              subtitle: Text('\$${product['price']}'),
-            );
-          },
-        ),
-      );
-    }
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Product List'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {
+                isLoading = true;
+                message = '';
+                retryCount = 0;
+              });
+              fetchProducts();
+            },
+          ),
+        ],
+      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : message.isNotEmpty
+              ? Center(child: Text(message))
+              : products.isEmpty
+                  ? const Center(child: Text('No products found'))
+                  : ListView.builder(
+                      itemCount: products.length,
+                      itemBuilder: (context, index) {
+                        final product = products[index];
+                        logger.debug(
+                            'Building list item for product: ${product['name']}');
+                        return ListTile(
+                          leading: const Image(
+                            image: AssetImage('assets/images/image.png'),
+                          ),
+                          title: Text(product['name']),
+                          subtitle: Text('\$${product['price']}'),
+                        );
+                      },
+                    ),
+    );
   }
 }
