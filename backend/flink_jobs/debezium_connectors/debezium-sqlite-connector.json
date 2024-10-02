@@ -1,21 +1,21 @@
 {
   "name": "sqlite-connector",
   "config": {
-      "connector.class": "io.debezium.connector.sqlite.SqliteConnector",
-      "database.hostname": "fastapi",
-      "database.port": "8000",
-      "database.user": "debezium",
-      "database.password": "dbz",
-      "database.dbname": "/databases/sqlite/products.db",
-      "database.server.name": "sqlite_server",
-      "table.include.list": "products,vendors",
-      "database.history.kafka.bootstrap.servers": "kafka:9092",
-      "database.history.kafka.topic": "schema-changes.sqlite",
-      "transforms": "unwrap",
-      "transforms.unwrap.type": "io.debezium.transforms.UnwrapFromEnvelope",
-      "key.converter": "org.apache.kafka.connect.json.JsonConverter",
-      "key.converter.schemas.enable": "false",
-      "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-      "value.converter.schemas.enable": "false"
+    "connector.class": "io.debezium.connector.sqlite.SqliteConnector",
+    "database.hostname": "fastapi",
+    "database.port": "8000",
+    "database.user": "debezium", 
+    "database.password": "dbz",   
+    "database.dbname": "/databases/sqlite/products.db",
+    "database.server.name": "sqlite_server",    
+    "table.include.list": "products,vendors",
+    "database.history.kafka.bootstrap.servers": "kafka:9092", 
+    "database.history.kafka.topic": "schema-changes.sqlite",
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.UnwrapFromEnvelope",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false"
   }
 }

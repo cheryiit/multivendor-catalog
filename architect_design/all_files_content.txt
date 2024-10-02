@@ -306,10 +306,9 @@ logger = setup_logger('main')
 async def lifespan(app: FastAPI):
     log_step(logger, 1, "Starting up FastAPI application")
     
-    # Log bakımı için bir background task başlat
     asyncio.create_task(periodic_log_maintenance())
 
-    # Startup event
+    # Startup işlemleri
     db_path = '/databases/sqlite/products.db'
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -339,6 +338,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
+# Yeni healthcheck endpoint
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 app.include_router(router)
 
 origins = ["*"]
@@ -352,11 +356,16 @@ app.add_middleware(
 )
 
 async def periodic_log_maintenance():
-    while True:
-        daily_log_maintenance()
-        await asyncio.sleep(24 * 60 * 60)  # 24 saat bekle
+    try:
+        while True:
+            daily_log_maintenance()  # Log bakımı işlemi
+            await asyncio.sleep(24 * 60 * 60)  # 24 saat bekle
+    except asyncio.CancelledError:
+        log_step(logger, "Log maintenance task was cancelled.")
+
 
 log_step(logger, 7, "FastAPI application configured and ready")
+
 
 ==================================================
 
@@ -459,6 +468,8 @@ from core.logger import setup_logger, log_step
 
 logger = setup_logger('database')
 
+# backend/app/core/database.py
+
 def get_db_connection() -> Generator:
     db_path = '/databases/sqlite/products.db'
     log_step(logger, 1, f"Attempting to connect to database: {db_path}")
@@ -475,6 +486,7 @@ def get_db_connection() -> Generator:
     except sqlite3.Error as e:
         log_step(logger, 5, f"Error connecting to database: {str(e)}")
         raise
+
 
 ==================================================
 
@@ -554,9 +566,6 @@ def send_data_to_kafka(data):
             log_step(logger, 4, f"WARNING: Data size ({len(serialized_data)} bytes) exceeds maximum message size ({MAX_MESSAGE_SIZE} bytes)")
             log_step(logger, 5, f"Data preview: {str(data)[:500]}...")  # Log first 500 characters of the data
             
-            # Implement message splitting logic here if needed
-            # For now, we'll just log a warning and try to send the data as is
-        
         future = kafka_producer.send(TOPIC_NAME, value=data)
         result = future.get(timeout=60)
         log_step(logger, 6, f"Data sent to Kafka topic: {TOPIC_NAME}, partition: {result.partition}, offset: {result.offset}")
@@ -575,36 +584,35 @@ import os
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-def setup_logger(name):
-    log_dir = '/app/logs'
+def setup_logger(name, log_dir='/app/logs'):
     if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-
+        os.makedirs(log_dir, exist_ok=True)
+    
     today = datetime.now().strftime('%Y-%m-%d')
     log_file = os.path.join(log_dir, f'app_{today}.log')
     
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
-
+    
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    # RotatingFileHandler kullanarak log dosyasının boyutunu sınırlayalım
+    
+    # RotatingFileHandler to limit the size of log files
     file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-
+    
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-
+    
     return logger
 
 def log_step(logger, step, message):
     logger.info(f"STEP {step}: {message}")
 
-def archive_old_logs(log_dir, days_to_keep=30):
+def archive_old_logs(log_dir='/app/logs', days_to_keep=30):
     import shutil
-    from datetime import timedelta
+    from datetime import datetime
 
     today = datetime.now()
     for filename in os.listdir(log_dir):
@@ -617,10 +625,9 @@ def archive_old_logs(log_dir, days_to_keep=30):
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 shutil.move(src, dst)
 
-# Her gün bir kez çalıştırılacak bir fonksiyon
-def daily_log_maintenance():
-    log_dir = '/app/logs'
+def daily_log_maintenance(log_dir='/app/logs'):
     archive_old_logs(log_dir)
+
 
 ==================================================
 
@@ -758,13 +765,14 @@ def cdc_sync_job():
 if __name__ == '__main__':
     cdc_sync_job()
 
+
 ==================================================
 
 backend/flink_jobs/flink_job.py :
 
 import sys
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.datastream.connectors import FlinkKafkaConsumer
+from pyflink.datastream.connectors import KafkaSource, KafkaOffsetsInitializer
 from pyflink.common.serialization import SimpleStringSchema
 import sqlite3
 import json
@@ -772,7 +780,7 @@ import requests
 import os
 from backend.app.core.logger import setup_logger, log_step
 
-logger = setup_logger('flink_job')
+logger = setup_logger('flink_job', log_dir='/flink_jobs/logs')
 
 # Kafka configuration
 KAFKA_BROKER_URL = os.getenv('KAFKA_BROKER_URL', 'kafka:9092')
@@ -795,12 +803,12 @@ def get_vendor_api_url(vendor_id):
             log_step(logger, 2, f"No API URL found for vendor {vendor_id}")
             return None
     except Exception as e:
-        log_step(logger, 2, f"Error fetching vendor API URL: {str(e)}")
+        log_step(logger, 3, f"Error fetching vendor API URL: {str(e)}")
         return None
 
 def insert_into_sqlite(products, vendor_id):
     try:
-        log_step(logger, 3, f"Inserting {len(products)} products into SQLite for vendor {vendor_id}")
+        log_step(logger, 4, f"Inserting {len(products)} products into SQLite for vendor {vendor_id}")
         conn = sqlite3.connect('/databases/sqlite/products.db')
         cursor = conn.cursor()
 
@@ -821,85 +829,63 @@ def insert_into_sqlite(products, vendor_id):
             )
         conn.commit()
         conn.close()
-        log_step(logger, 4, f"Successfully inserted {len(products)} products into SQLite for vendor {vendor_id}")
+        log_step(logger, 5, f"Successfully inserted {len(products)} products into SQLite for vendor {vendor_id}")
     except Exception as e:
-        log_step(logger, 4, f"Error inserting products into SQLite: {str(e)}")
-
-def get_size(obj, seen=None):
-    """Recursively calculate size of objects"""
-    size = sys.getsizeof(obj)
-    if seen is None:
-        seen = set()
-    obj_id = id(obj)
-    if obj_id in seen:
-        return 0
-    seen.add(obj_id)
-    if isinstance(obj, dict):
-        size += sum([get_size(v, seen) for v in obj.values()])
-        size += sum([get_size(k, seen) for k in obj.keys()])
-    elif hasattr(obj, '__dict__'):
-        size += get_size(obj.__dict__, seen)
-    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
-        size += sum([get_size(i, seen) for i in obj])
-    return size
+        log_step(logger, 6, f"Error inserting products into SQLite: {str(e)}")
 
 def process_message(message):
     try:
-        log_step(logger, 1, f"Processing message. Message size: {len(message)} bytes")
+        log_step(logger, 7, f"Processing message. Message size: {len(message)} bytes")
         data = json.loads(message)
-        log_step(logger, 2, f"Parsed data size: {get_size(data)} bytes")
-        
         vendor_id = data.get('vendor_id')
-        log_step(logger, 3, f"Processing data for vendor_id: {vendor_id}")
-
         api_url = get_vendor_api_url(vendor_id)
+
         if not api_url:
-            log_step(logger, 4, f"Vendor with ID {vendor_id} not found or has no API URL")
+            log_step(logger, 8, f"Vendor with ID {vendor_id} not found or has no API URL")
             return
 
-        log_step(logger, 5, f"Fetching data from API URL: {api_url}")
+        log_step(logger, 9, f"Fetching data from API URL: {api_url}")
         response = requests.get(api_url)
-        log_step(logger, 6, f"API response size: {len(response.content)} bytes")
-        
+
         if response.status_code == 200:
             products = response.json().get('products', [])
-            log_step(logger, 7, f"Fetched {len(products)} products from vendor {vendor_id}")
-            log_step(logger, 8, f"Total size of products data: {get_size(products)} bytes")
-            
-            for i, product in enumerate(products[:5]):  # Log details of first 5 products
-                log_step(logger, 9, f"Product {i+1} details: {json.dumps(product)[:200]}...")  # Log first 200 characters
-            
             insert_into_sqlite(products, vendor_id)
         else:
-            log_step(logger, 7, f"Failed to fetch data from vendor {vendor_id}, status code: {response.status_code}")
+            log_step(logger, 10, f"API request failed with status code: {response.status_code}")
+
+    except requests.RequestException as e:
+        log_step(logger, 11, f"Error fetching data from vendor {vendor_id}: {str(e)}")
     except Exception as e:
-        log_step(logger, 10, f"Exception occurred while processing message: {str(e)}")
-        log_step(logger, 11, f"Full message content: {message[:1000]}...")  # Log first 1000 characters of the message
+        log_step(logger, 12, f"General error processing message: {str(e)}")
 
 def flink_job():
-    log_step(logger, 10, "Starting Flink job")
+    log_step(logger, 13, "Starting Flink job")
     env = StreamExecutionEnvironment.get_execution_environment()
 
-    kafka_consumer = FlinkKafkaConsumer(
-        topics=[TOPIC_NAME],
-        deserialization_schema=SimpleStringSchema(),
-        properties={
-            'bootstrap.servers': KAFKA_BROKER_URL,
-            'group.id': 'flink_consumer',
-            'auto.offset.reset': 'earliest'
-        }
+    kafka_source = KafkaSource.builder() \
+        .set_bootstrap_servers(KAFKA_BROKER_URL) \
+        .set_topics(TOPIC_NAME) \
+        .set_group_id("flink_consumer") \
+        .set_starting_offsets(KafkaOffsetsInitializer.earliest()) \
+        .set_value_only_deserializer(SimpleStringSchema()) \
+        .build()
+
+    log_step(logger, 14, f"Created Kafka source for topic: {TOPIC_NAME}")
+
+    kafka_stream = env.from_source(
+        source=kafka_source,
+        watermark_strategy=None,
+        source_name="Kafka Source"
     )
 
-    log_step(logger, 11, f"Created Kafka consumer for topic: {TOPIC_NAME}")
+    kafka_stream.process(lambda ctx, value: process_message(value))
 
-    kafka_stream = env.add_source(kafka_consumer)
-    kafka_stream.map(process_message)
-
-    log_step(logger, 12, "Executing Flink Vendor Data Fetch Job")
+    log_step(logger, 15, "Executing Flink Vendor Data Fetch Job")
     env.execute("Flink Vendor Data Fetch Job")
 
 if __name__ == '__main__':
     flink_job()
+
 
 ==================================================
 
@@ -930,6 +916,7 @@ backend/flink_jobs/debezium_connectors/debezium-postgres-connector.json :
   }
 }
 
+
 ==================================================
 
 backend/flink_jobs/debezium_connectors/debezium-sqlite-connector.json :
@@ -937,24 +924,25 @@ backend/flink_jobs/debezium_connectors/debezium-sqlite-connector.json :
 {
   "name": "sqlite-connector",
   "config": {
-      "connector.class": "io.debezium.connector.sqlite.SqliteConnector",
-      "database.hostname": "fastapi",
-      "database.port": "8000",
-      "database.user": "debezium",
-      "database.password": "dbz",
-      "database.dbname": "/databases/sqlite/products.db",
-      "database.server.name": "sqlite_server",
-      "table.include.list": "products,vendors",
-      "database.history.kafka.bootstrap.servers": "kafka:9092",
-      "database.history.kafka.topic": "schema-changes.sqlite",
-      "transforms": "unwrap",
-      "transforms.unwrap.type": "io.debezium.transforms.UnwrapFromEnvelope",
-      "key.converter": "org.apache.kafka.connect.json.JsonConverter",
-      "key.converter.schemas.enable": "false",
-      "value.converter": "org.apache.kafka.connect.json.JsonConverter",
-      "value.converter.schemas.enable": "false"
+    "connector.class": "io.debezium.connector.sqlite.SqliteConnector",
+    "database.hostname": "fastapi",
+    "database.port": "8000",
+    "database.user": "debezium", 
+    "database.password": "dbz",   
+    "database.dbname": "/databases/sqlite/products.db",
+    "database.server.name": "sqlite_server",    
+    "table.include.list": "products,vendors",
+    "database.history.kafka.bootstrap.servers": "kafka:9092", 
+    "database.history.kafka.topic": "schema-changes.sqlite",
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.UnwrapFromEnvelope",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false"
   }
 }
+
 
 ==================================================
 
@@ -1031,20 +1019,39 @@ INSERT OR IGNORE INTO vendors (id, name, site, api_url) VALUES
 
 flink/Dockerfile :
 
-FROM flink:1.16.1
+FROM flink:1.19.0
 
-# Gerekli Python paketlerini yükleyin
+# Add curl to install dependencies
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip && \
+    apt-get install -y python3 python3-pip curl && \
+    ln -s /usr/bin/python3 /usr/bin/python && \
     rm -rf /var/lib/apt/lists/*
 
+# Install Python dependencies
 RUN pip3 install --no-cache-dir requests psycopg2-binary
 
-# İşlerinizi koyacağınız dizin
+# Set working directory
 WORKDIR /flink_jobs
 
-# Flink job dosyalarınızı kopyalayın
+# Copy Flink job files
 COPY ./backend/flink_jobs /flink_jobs
+
+# Copy the entire backend directory into the root of the container
+COPY ./backend /backend
+
+# Set PYTHONPATH to include the root directory so that 'backend' is in the Python path
+ENV PYTHONPATH="/"
+
+# Create logs directory and set permissions
+RUN mkdir -p /flink_jobs/logs && chmod -R 777 /flink_jobs/logs
+
+# Download the Kafka connector JAR compatible with Flink 1.19
+RUN curl -L -o /opt/flink/lib/flink-connector-kafka-3.2.0-1.19.jar \
+    https://repo1.maven.org/maven2/org/apache/flink/flink-connector-kafka/3.2.0-1.19/flink-connector-kafka-3.2.0-1.19.jar
+
+# Default command
+CMD ["flink", "run", "-d", "-py", "/flink_jobs/flink_job.py"]
+
 
 ==================================================
 

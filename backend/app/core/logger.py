@@ -3,36 +3,35 @@ import os
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-def setup_logger(name):
-    log_dir = '/app/logs'
+def setup_logger(name, log_dir='/app/logs'):
     if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-
+        os.makedirs(log_dir, exist_ok=True)
+    
     today = datetime.now().strftime('%Y-%m-%d')
     log_file = os.path.join(log_dir, f'app_{today}.log')
     
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
-
+    
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    # RotatingFileHandler kullanarak log dosyasının boyutunu sınırlayalım
+    
+    # RotatingFileHandler to limit the size of log files
     file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-
+    
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
-
+    
     return logger
 
 def log_step(logger, step, message):
     logger.info(f"STEP {step}: {message}")
 
-def archive_old_logs(log_dir, days_to_keep=30):
+def archive_old_logs(log_dir='/app/logs', days_to_keep=30):
     import shutil
-    from datetime import timedelta
+    from datetime import datetime
 
     today = datetime.now()
     for filename in os.listdir(log_dir):
@@ -45,7 +44,5 @@ def archive_old_logs(log_dir, days_to_keep=30):
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 shutil.move(src, dst)
 
-# Her gün bir kez çalıştırılacak bir fonksiyon
-def daily_log_maintenance():
-    log_dir = '/app/logs'
+def daily_log_maintenance(log_dir='/app/logs'):
     archive_old_logs(log_dir)

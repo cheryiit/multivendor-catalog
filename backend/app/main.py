@@ -14,10 +14,9 @@ logger = setup_logger('main')
 async def lifespan(app: FastAPI):
     log_step(logger, 1, "Starting up FastAPI application")
     
-    # Log bakımı için bir background task başlat
     asyncio.create_task(periodic_log_maintenance())
 
-    # Startup event
+    # Startup işlemleri
     db_path = '/databases/sqlite/products.db'
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -47,6 +46,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
+# Yeni healthcheck endpoint
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 app.include_router(router)
 
 origins = ["*"]
@@ -60,8 +64,12 @@ app.add_middleware(
 )
 
 async def periodic_log_maintenance():
-    while True:
-        daily_log_maintenance()
-        await asyncio.sleep(24 * 60 * 60)  # 24 saat bekle
+    try:
+        while True:
+            daily_log_maintenance()  # Log bakımı işlemi
+            await asyncio.sleep(24 * 60 * 60)  # 24 saat bekle
+    except asyncio.CancelledError:
+        log_step(logger, "Log maintenance task was cancelled.")
+
 
 log_step(logger, 7, "FastAPI application configured and ready")

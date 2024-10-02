@@ -72,9 +72,6 @@ def send_data_to_kafka(data):
             log_step(logger, 4, f"WARNING: Data size ({len(serialized_data)} bytes) exceeds maximum message size ({MAX_MESSAGE_SIZE} bytes)")
             log_step(logger, 5, f"Data preview: {str(data)[:500]}...")  # Log first 500 characters of the data
             
-            # Implement message splitting logic here if needed
-            # For now, we'll just log a warning and try to send the data as is
-        
         future = kafka_producer.send(TOPIC_NAME, value=data)
         result = future.get(timeout=60)
         log_step(logger, 6, f"Data sent to Kafka topic: {TOPIC_NAME}, partition: {result.partition}, offset: {result.offset}")

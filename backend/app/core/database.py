@@ -4,6 +4,8 @@ from core.logger import setup_logger, log_step
 
 logger = setup_logger('database')
 
+# backend/app/core/database.py
+
 def get_db_connection() -> Generator:
     db_path = '/databases/sqlite/products.db'
     log_step(logger, 1, f"Attempting to connect to database: {db_path}")
