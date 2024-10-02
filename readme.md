@@ -1,6 +1,19 @@
 # Case Study UNIFIED_VENDOR_CATALOG
-# Future implemantion plan of Architect and Structure
 
+How to run:
+___
+```
+git clone https://github.com/cheryiit/multivendor-catalog.git
+cd multivendor-catalog
+pip install -r requirements.txt
+docker-compose up
+cd mobile_app
+flutter run
+```
+___
+
+
+# Future implemantion plan of Architect and Structure
 # System Architect
 ___
 ```mermaid
