@@ -13,7 +13,6 @@ logger = setup_logger('flink_job', log_dir='/flink_jobs/logs')
 # Kafka configuration
 KAFKA_BROKER_URL = os.getenv('KAFKA_BROKER_URL', 'kafka:9092')
 TOPIC_NAME = 'vendor_requests'
-
 DEFAULT_IMAGE = 'image.png'
 
 def get_vendor_api_url(vendor_id):
