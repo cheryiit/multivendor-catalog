@@ -1,4 +1,4 @@
-# Case Study UNIFIED_VENDOR_CATALOG
+# Case Study: UNIFIED_VENDOR_CATALOG
 
 How to run:
 ___
