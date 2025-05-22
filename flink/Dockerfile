@@ -1,5 +1,5 @@
 FROM flink:1.19.0
-
+# While many versions of flink were unstable, this version was the most workable.
 # Install dependencies including PostgreSQL dev libraries
 RUN apt-get update && \
     apt-get install -y python3 python3-pip curl libpq-dev gcc && \
